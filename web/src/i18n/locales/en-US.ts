@@ -13,11 +13,13 @@ const messages: typeof zh = {
       close: 'Close',
       copy: 'Copy',
       add: 'Add',
+      back: 'Back',
     },
     status: {
       loading: 'Loading…',
       configured: 'Configured',
       notConfigured: 'Not configured',
+      comingSoon: 'Not yet',
       enabled: 'Enabled',
       disabled: 'Disabled',
       yes: 'Yes',
@@ -108,7 +110,7 @@ const messages: typeof zh = {
       system: 'System',
       appearance: 'Appearance',
       notify: 'Notifications',
-      accounts: 'Xiaomi Accounts',
+      accounts: 'Sync Accounts',
       password: 'Password',
       passkey: 'Passkey',
       mcp: 'MCP Token',
@@ -689,8 +691,8 @@ const messages: typeof zh = {
       deleteFailed: 'Delete failed',
     },
     account: {
-      title: 'Xiaomi Accounts',
-      description: 'Account credentials used to access Xiaomi cloud services',
+      title: 'Sync Accounts',
+      description: 'Account credentials used to access cloud album services',
       add: 'Add account',
       edit: 'Edit account',
       insecureWarning:
@@ -715,7 +717,18 @@ const messages: typeof zh = {
         'Delete account {name}? All data related to this account will be deleted as well',
       confirmDeleteTitle: 'Confirm deletion',
       confirmDeleteAccept: 'Delete',
-      qrAdd: 'Scan QR to add',
+      provider: 'Provider',
+      providerXiaomi: 'Xiaomi Cloud',
+      providerXiaomiDesc: 'Sync Xiaomi Cloud albums and recordings',
+      providerIcloud: 'Apple iCloud',
+      providerIcloudDesc: 'Sync iCloud Photos — Advanced Data Protection must be off',
+      methodQrTitle: 'Scan QR code',
+      methodQrDesc:
+        'Scan with a Xiaomi phone or tablet to authorize and get credentials automatically (recommended)',
+      methodManualTitle: 'PassToken sign-in',
+      methodManualDesc:
+        'Enter userId and PassToken manually — see the project homepage for how to obtain them',
+      adpHint: 'Turn off "Advanced Data Protection" in your Xiaomi account first',
       qrTitle: 'Scan to sign in with Xiaomi account',
       qrTip:
         'Scan with your Xiaomi phone or tablet via Settings > Xiaomi Account, or open the link with any QR scanner to authorize',

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
+import Tag from 'primevue/tag'
 import Textarea from 'primevue/textarea'
 import InputText from 'primevue/inputtext'
 import Dialog from 'primevue/dialog'
@@ -31,6 +32,8 @@ const saving = ref(false)
 const showDialog = ref(false)
 const isEditMode = ref(false)
 const isInsecureContext = ref(false)
+const dialogStep = ref<'provider' | 'method' | 'qr' | 'manual'>('provider')
+const slideDir = ref<'slide-left' | 'slide-right'>('slide-left')
 
 // 表单数据
 const form = ref({
@@ -41,13 +44,20 @@ const form = ref({
 })
 
 // 扫码登录
-const qrDialog = ref(false)
 const qrSession = ref<QrLoginSessionView | null>(null)
 const qrStatus = ref<QrLoginStatus | 'CREATING'>('CREATING')
 const qrError = ref('')
 let qrTimer: ReturnType<typeof setInterval> | undefined
 
 const { t } = useI18n()
+
+const dialogHeader = computed(() => {
+  if (isEditMode.value) return t('tokens.account.edit')
+  if (dialogStep.value === 'qr') return t('tokens.account.qrTitle')
+  if (dialogStep.value === 'manual') return t('tokens.account.methodManualTitle')
+  if (dialogStep.value === 'method') return t('tokens.account.providerXiaomi')
+  return t('tokens.account.add')
+})
 const toast = useToast()
 const confirm = useConfirm()
 
@@ -64,8 +74,8 @@ onUnmounted(() => {
   stopQrPolling()
 })
 
-watch(qrDialog, (visible) => {
-  if (!visible) stopQrPolling()
+watch([showDialog, dialogStep], ([visible, step]) => {
+  if (!visible || step !== 'qr') stopQrPolling()
 })
 
 function stopQrPolling() {
@@ -75,9 +85,26 @@ function stopQrPolling() {
   }
 }
 
-async function openQrDialog() {
-  qrDialog.value = true
-  await refreshQrSession()
+function selectXiaomi() {
+  slideDir.value = 'slide-left'
+  dialogStep.value = 'method'
+}
+
+function selectQr() {
+  slideDir.value = 'slide-left'
+  dialogStep.value = 'qr'
+  refreshQrSession()
+}
+
+function selectManual() {
+  slideDir.value = 'slide-left'
+  dialogStep.value = 'manual'
+}
+
+function goBack() {
+  stopQrPolling()
+  slideDir.value = 'slide-right'
+  dialogStep.value = dialogStep.value === 'method' ? 'provider' : 'method'
 }
 
 async function refreshQrSession() {
@@ -112,7 +139,7 @@ function startQrPolling() {
           detail: t('tokens.account.qrLoggedIn', { name: result.nickname || result.userId }),
           life: 3000,
         })
-        qrDialog.value = false
+        showDialog.value = false
         await Promise.all([
           accountsStore.refreshAccounts(),
           albumsStore.refreshAlbums(),
@@ -129,9 +156,11 @@ function startQrPolling() {
   }, 2000)
 }
 
-function openCreateDialog() {
+function openAddDialog() {
   isEditMode.value = false
   form.value = { id: 0, userId: '', nickname: '', passToken: '' }
+  slideDir.value = 'slide-left'
+  dialogStep.value = 'provider'
   showDialog.value = true
 }
 
@@ -144,6 +173,7 @@ function openEditDialog(account: Account) {
     nickname: account.nickname,
     passToken: '',
   }
+  dialogStep.value = 'manual'
   showDialog.value = true
 }
 
@@ -236,22 +266,13 @@ function confirmDelete(account: Account) {
 <template>
   <SettingSection :title="t('tokens.account.title')" :description="t('tokens.account.description')">
     <template #actions>
-      <div class="flex gap-2">
-        <Button
-          :label="t('tokens.account.qrAdd')"
-          icon="pi pi-qrcode"
-          size="small"
-          severity="secondary"
-          @click="openQrDialog"
-        />
-        <Button
-          :label="t('tokens.account.add')"
-          icon="pi pi-plus"
-          size="small"
-          severity="primary"
-          @click="openCreateDialog"
-        />
-      </div>
+      <Button
+        :label="t('tokens.account.add')"
+        icon="pi pi-plus"
+        size="small"
+        severity="primary"
+        @click="openAddDialog"
+      />
     </template>
 
     <div
@@ -265,6 +286,11 @@ function confirmDelete(account: Account) {
       <template #empty>{{ t('tokens.account.empty') }}</template>
       <Column field="nickname" :header="t('tokens.account.nickname')"></Column>
       <Column field="userId" :header="t('tokens.account.userId')"></Column>
+      <Column :header="t('tokens.account.provider')">
+        <template #body>
+          <Tag :value="t('tokens.account.providerXiaomi')" severity="info" />
+        </template>
+      </Column>
       <Column :header="t('tokens.table.actions')" :style="{ width: '10rem' }">
         <template #body="slotProps">
           <div class="flex gap-2">
@@ -289,136 +315,237 @@ function confirmDelete(account: Account) {
   </SettingSection>
 
   <!-- 添加/编辑 弹窗 -->
-  <Dialog
-    v-model:visible="showDialog"
-    modal
-    :header="isEditMode ? t('tokens.account.edit') : t('tokens.account.add')"
-    class="w-full sm:w-[480px]"
-  >
-    <div class="flex flex-col gap-4 pt-2">
-      <div class="flex gap-3">
-        <div class="flex-1">
-          <label class="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">{{
-            t('tokens.account.userId')
-          }}</label>
-          <InputText
-            v-model="form.userId"
-            :placeholder="t('tokens.account.userIdPlaceholder')"
-            class="w-full"
-          />
-        </div>
-        <div class="flex-1">
-          <label class="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1"
-            >{{ t('tokens.account.nickname') }} ({{ t('common.field.optional') }})</label
+  <Dialog v-model:visible="showDialog" modal :header="dialogHeader" class="w-full sm:w-[480px]">
+    <div class="overflow-x-hidden">
+      <Transition :name="slideDir" mode="out-in">
+        <!-- 渠道选择 -->
+        <div v-if="dialogStep === 'provider'" key="provider" class="flex flex-col gap-3 pt-2">
+          <button
+            type="button"
+            class="flex items-center gap-4 rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-4 cursor-pointer transition-colors hover:border-slate-400 dark:hover:border-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800"
+            @click="selectXiaomi"
           >
-          <InputText
-            v-model="form.nickname"
-            :placeholder="t('tokens.account.nicknamePlaceholder')"
-            class="w-full"
+            <i class="pi pi-cloud text-2xl text-slate-600 dark:text-slate-300"></i>
+            <span class="flex flex-col items-start text-left">
+              <span class="font-medium text-slate-800 dark:text-slate-100">{{
+                t('tokens.account.providerXiaomi')
+              }}</span>
+              <span class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{{
+                t('tokens.account.providerXiaomiDesc')
+              }}</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            disabled
+            class="flex items-center gap-4 rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-4 opacity-50 cursor-not-allowed"
+          >
+            <i class="pi pi-apple text-2xl text-slate-600 dark:text-slate-300"></i>
+            <span class="flex flex-col items-start text-left flex-1">
+              <span class="font-medium text-slate-800 dark:text-slate-100">{{
+                t('tokens.account.providerIcloud')
+              }}</span>
+              <span class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{{
+                t('tokens.account.providerIcloudDesc')
+              }}</span>
+            </span>
+            <Tag :value="t('common.status.comingSoon')" severity="secondary" />
+          </button>
+        </div>
+
+        <!-- 添加方式选择 -->
+        <div v-else-if="dialogStep === 'method'" key="method" class="flex flex-col gap-3 pt-2">
+          <button
+            type="button"
+            class="flex items-center gap-4 rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-4 cursor-pointer transition-colors hover:border-slate-400 dark:hover:border-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800"
+            @click="selectQr"
+          >
+            <i class="pi pi-qrcode text-2xl text-slate-600 dark:text-slate-300"></i>
+            <span class="flex flex-col items-start text-left flex-1">
+              <span class="font-medium text-slate-800 dark:text-slate-100">{{
+                t('tokens.account.methodQrTitle')
+              }}</span>
+              <span class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{{
+                t('tokens.account.methodQrDesc')
+              }}</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            class="flex items-center gap-4 rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-4 cursor-pointer transition-colors hover:border-slate-400 dark:hover:border-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800"
+            @click="selectManual"
+          >
+            <i class="pi pi-key text-2xl text-slate-600 dark:text-slate-300"></i>
+            <span class="flex flex-col items-start text-left flex-1">
+              <span class="font-medium text-slate-800 dark:text-slate-100">{{
+                t('tokens.account.methodManualTitle')
+              }}</span>
+              <span class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{{
+                t('tokens.account.methodManualDesc')
+              }}</span>
+            </span>
+          </button>
+          <div
+            class="rounded-md bg-slate-50 dark:bg-slate-800 text-xs text-slate-500 dark:text-slate-400 px-3 py-2"
+          >
+            {{ t('tokens.account.adpHint') }}
+          </div>
+        </div>
+
+        <!-- 扫码登录 -->
+        <div v-else-if="dialogStep === 'qr'" key="qr" class="flex flex-col items-center gap-4 pt-2">
+          <div
+            class="w-[240px] h-[240px] flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 overflow-hidden"
+          >
+            <i
+              v-if="qrStatus === 'CREATING'"
+              class="pi pi-spin pi-spinner text-3xl text-slate-400"
+            ></i>
+            <img
+              v-else-if="qrSession"
+              :src="qrSession.qrUrl"
+              :alt="t('tokens.account.qrTitle')"
+              class="w-full h-full object-contain"
+              :class="{ 'opacity-30': qrStatus === 'EXPIRED' }"
+            />
+            <i v-else class="pi pi-exclamation-triangle text-3xl text-red-400"></i>
+          </div>
+
+          <div class="text-center text-sm">
+            <p v-if="qrStatus === 'CREATING'" class="text-slate-500 dark:text-slate-400">
+              {{ t('tokens.account.qrGenerating') }}
+            </p>
+            <template v-else-if="qrStatus === 'WAITING'">
+              <p class="font-medium text-slate-700 dark:text-slate-200">
+                {{ t('tokens.account.qrWaiting') }}
+              </p>
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                {{ t('tokens.account.qrTip') }}
+              </p>
+            </template>
+            <p v-else-if="qrStatus === 'EXPIRED'" class="text-amber-600 dark:text-amber-400">
+              {{ t('tokens.account.qrExpired') }}
+            </p>
+            <p v-else-if="qrStatus === 'FAILED'" class="text-red-600 dark:text-red-400">
+              {{ t('tokens.account.qrFailed') }}<template v-if="qrError">：{{ qrError }}</template>
+            </p>
+          </div>
+        </div>
+
+        <!-- PassToken 表单 -->
+        <div v-else key="manual" class="flex flex-col gap-4 pt-2">
+          <div class="flex gap-3">
+            <div class="flex-1">
+              <label class="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">{{
+                t('tokens.account.userId')
+              }}</label>
+              <InputText
+                v-model="form.userId"
+                :placeholder="t('tokens.account.userIdPlaceholder')"
+                class="w-full"
+              />
+            </div>
+            <div class="flex-1">
+              <label class="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1"
+                >{{ t('tokens.account.nickname') }} ({{ t('common.field.optional') }})</label
+              >
+              <InputText
+                v-model="form.nickname"
+                :placeholder="t('tokens.account.nicknamePlaceholder')"
+                class="w-full"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">{{
+              t('tokens.account.passToken')
+            }}</label>
+            <Textarea
+              v-model="form.passToken"
+              rows="5"
+              :placeholder="
+                isEditMode
+                  ? t('tokens.account.passTokenPlaceholderEdit')
+                  : t('tokens.account.passTokenPlaceholder')
+              "
+              class="w-full"
+            />
+            <p v-if="isEditMode" class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              {{ t('tokens.account.passTokenNote') }}
+            </p>
+          </div>
+
+          <div v-if="isInsecureContext" class="text-xs text-red-600 dark:text-red-300">
+            {{ t('tokens.account.insecureShort') }}
+          </div>
+        </div>
+      </Transition>
+    </div>
+
+    <template #footer>
+      <div class="flex items-center w-full mt-4">
+        <Button
+          v-if="!isEditMode && dialogStep !== 'provider'"
+          :label="t('common.action.back')"
+          icon="pi pi-arrow-left"
+          severity="secondary"
+          text
+          @click="goBack"
+        />
+        <div class="flex items-center justify-end gap-2 flex-1">
+          <Button
+            :label="t('common.action.cancel')"
+            severity="secondary"
+            text
+            @click="showDialog = false"
+          />
+          <Button
+            v-if="dialogStep === 'qr' && (qrStatus === 'EXPIRED' || qrStatus === 'FAILED')"
+            :label="t('tokens.account.qrRetry')"
+            severity="primary"
+            @click="refreshQrSession"
+          />
+          <Button
+            v-else-if="dialogStep === 'manual'"
+            :label="t('common.action.save')"
+            severity="primary"
+            :loading="saving"
+            @click="onSave"
           />
         </div>
-      </div>
-
-      <div>
-        <label class="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">{{
-          t('tokens.account.passToken')
-        }}</label>
-        <Textarea
-          v-model="form.passToken"
-          rows="5"
-          :placeholder="
-            isEditMode
-              ? t('tokens.account.passTokenPlaceholderEdit')
-              : t('tokens.account.passTokenPlaceholder')
-          "
-          class="w-full"
-        />
-        <p v-if="isEditMode" class="text-xs text-slate-500 dark:text-slate-400 mt-1">
-          {{ t('tokens.account.passTokenNote') }}
-        </p>
-      </div>
-
-      <div v-if="isInsecureContext" class="text-xs text-red-600 dark:text-red-300">
-        {{ t('tokens.account.insecureShort') }}
-      </div>
-    </div>
-
-    <template #footer>
-      <div class="flex items-center justify-end gap-2 w-full mt-4">
-        <Button
-          :label="t('common.action.cancel')"
-          severity="secondary"
-          text
-          @click="showDialog = false"
-        />
-        <Button
-          :label="t('common.action.save')"
-          severity="primary"
-          :loading="saving"
-          @click="onSave"
-        />
-      </div>
-    </template>
-  </Dialog>
-
-  <!-- 扫码登录 弹窗 -->
-  <Dialog
-    v-model:visible="qrDialog"
-    modal
-    :header="t('tokens.account.qrTitle')"
-    class="w-full sm:w-[400px]"
-  >
-    <div class="flex flex-col items-center gap-4 pt-2">
-      <div
-        class="w-[240px] h-[240px] flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 overflow-hidden"
-      >
-        <i v-if="qrStatus === 'CREATING'" class="pi pi-spin pi-spinner text-3xl text-slate-400"></i>
-        <img
-          v-else-if="qrSession"
-          :src="qrSession.qrUrl"
-          :alt="t('tokens.account.qrTitle')"
-          class="w-full h-full object-contain"
-          :class="{ 'opacity-30': qrStatus === 'EXPIRED' }"
-        />
-        <i v-else class="pi pi-exclamation-triangle text-3xl text-red-400"></i>
-      </div>
-
-      <div class="text-center text-sm">
-        <p v-if="qrStatus === 'CREATING'" class="text-slate-500 dark:text-slate-400">
-          {{ t('tokens.account.qrGenerating') }}
-        </p>
-        <template v-else-if="qrStatus === 'WAITING'">
-          <p class="font-medium text-slate-700 dark:text-slate-200">
-            {{ t('tokens.account.qrWaiting') }}
-          </p>
-          <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            {{ t('tokens.account.qrTip') }}
-          </p>
-        </template>
-        <p v-else-if="qrStatus === 'EXPIRED'" class="text-amber-600 dark:text-amber-400">
-          {{ t('tokens.account.qrExpired') }}
-        </p>
-        <p v-else-if="qrStatus === 'FAILED'" class="text-red-600 dark:text-red-400">
-          {{ t('tokens.account.qrFailed') }}<template v-if="qrError">：{{ qrError }}</template>
-        </p>
-      </div>
-    </div>
-
-    <template #footer>
-      <div class="flex items-center justify-end gap-2 w-full mt-4">
-        <Button
-          :label="t('common.action.cancel')"
-          severity="secondary"
-          text
-          @click="qrDialog = false"
-        />
-        <Button
-          v-if="qrStatus === 'EXPIRED' || qrStatus === 'FAILED'"
-          :label="t('tokens.account.qrRetry')"
-          severity="primary"
-          @click="refreshQrSession"
-        />
       </div>
     </template>
   </Dialog>
 </template>
+
+<style scoped>
+.slide-left-enter-active,
+.slide-left-leave-active,
+.slide-right-enter-active,
+.slide-right-leave-active {
+  transition:
+    transform 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.slide-left-enter-from {
+  opacity: 0;
+  transform: translateX(28px);
+}
+
+.slide-left-leave-to {
+  opacity: 0;
+  transform: translateX(-28px);
+}
+
+.slide-right-enter-from {
+  opacity: 0;
+  transform: translateX(-28px);
+}
+
+.slide-right-leave-to {
+  opacity: 0;
+  transform: translateX(28px);
+}
+</style>
