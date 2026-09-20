@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Textarea from 'primevue/textarea'
@@ -11,7 +11,10 @@ import SettingSection from '@/components/settings/SettingSection.vue'
 import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
 import type { XiaomiAccountDto } from '@/__generated/model/dto'
+import type { QrLoginSessionView } from '@/__generated/model/static'
+import type { QrLoginStatus } from '@/__generated/model/enums'
 import { storeToRefs } from 'pinia'
+import { api } from '@/ApiInstance'
 import { useAccountsStore } from '@/stores/accounts'
 import { useAlbumsStore } from '@/stores/albums'
 import { useCrontabsStore } from '@/stores/crontabs'
@@ -37,6 +40,13 @@ const form = ref({
   passToken: '',
 })
 
+// 扫码登录
+const qrDialog = ref(false)
+const qrSession = ref<QrLoginSessionView | null>(null)
+const qrStatus = ref<QrLoginStatus | 'CREATING'>('CREATING')
+const qrError = ref('')
+let qrTimer: ReturnType<typeof setInterval> | undefined
+
 const { t } = useI18n()
 const toast = useToast()
 const confirm = useConfirm()
@@ -49,6 +59,75 @@ onMounted(() => {
   }
   accountsStore.fetchAccounts()
 })
+
+onUnmounted(() => {
+  stopQrPolling()
+})
+
+watch(qrDialog, (visible) => {
+  if (!visible) stopQrPolling()
+})
+
+function stopQrPolling() {
+  if (qrTimer !== undefined) {
+    clearInterval(qrTimer)
+    qrTimer = undefined
+  }
+}
+
+async function openQrDialog() {
+  qrDialog.value = true
+  await refreshQrSession()
+}
+
+async function refreshQrSession() {
+  stopQrPolling()
+  qrSession.value = null
+  qrStatus.value = 'CREATING'
+  qrError.value = ''
+  try {
+    qrSession.value = await api.qrLoginController.create()
+    qrStatus.value = 'WAITING'
+    startQrPolling()
+  } catch (e) {
+    qrStatus.value = 'FAILED'
+    qrError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+function startQrPolling() {
+  qrTimer = setInterval(async () => {
+    const session = qrSession.value
+    if (!session) return
+    try {
+      const result = await api.qrLoginController.status({ sessionId: session.sessionId })
+      qrStatus.value = result.status
+      if (result.status === 'WAITING') return
+
+      stopQrPolling()
+      if (result.status === 'SUCCESS') {
+        toast.add({
+          severity: 'success',
+          summary: t('common.toast.success'),
+          detail: t('tokens.account.qrLoggedIn', { name: result.nickname || result.userId }),
+          life: 3000,
+        })
+        qrDialog.value = false
+        await Promise.all([
+          accountsStore.refreshAccounts(),
+          albumsStore.refreshAlbums(),
+          crontabsStore.refreshCrontabs(),
+        ])
+      } else if (result.status === 'FAILED') {
+        qrError.value = result.error ?? ''
+      }
+    } catch (e) {
+      stopQrPolling()
+      qrStatus.value = 'FAILED'
+      qrError.value = e instanceof Error ? e.message : String(e)
+    }
+  }, 2000)
+}
 
 function openCreateDialog() {
   isEditMode.value = false
@@ -157,13 +236,22 @@ function confirmDelete(account: Account) {
 <template>
   <SettingSection :title="t('tokens.account.title')" :description="t('tokens.account.description')">
     <template #actions>
-      <Button
-        :label="t('tokens.account.add')"
-        icon="pi pi-plus"
-        size="small"
-        severity="primary"
-        @click="openCreateDialog"
-      />
+      <div class="flex gap-2">
+        <Button
+          :label="t('tokens.account.qrAdd')"
+          icon="pi pi-qrcode"
+          size="small"
+          severity="secondary"
+          @click="openQrDialog"
+        />
+        <Button
+          :label="t('tokens.account.add')"
+          icon="pi pi-plus"
+          size="small"
+          severity="primary"
+          @click="openCreateDialog"
+        />
+      </div>
     </template>
 
     <div
@@ -268,6 +356,67 @@ function confirmDelete(account: Account) {
           severity="primary"
           :loading="saving"
           @click="onSave"
+        />
+      </div>
+    </template>
+  </Dialog>
+
+  <!-- 扫码登录 弹窗 -->
+  <Dialog
+    v-model:visible="qrDialog"
+    modal
+    :header="t('tokens.account.qrTitle')"
+    class="w-full sm:w-[400px]"
+  >
+    <div class="flex flex-col items-center gap-4 pt-2">
+      <div
+        class="w-[240px] h-[240px] flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 overflow-hidden"
+      >
+        <i v-if="qrStatus === 'CREATING'" class="pi pi-spin pi-spinner text-3xl text-slate-400"></i>
+        <img
+          v-else-if="qrSession"
+          :src="qrSession.qrUrl"
+          :alt="t('tokens.account.qrTitle')"
+          class="w-full h-full object-contain"
+          :class="{ 'opacity-30': qrStatus === 'EXPIRED' }"
+        />
+        <i v-else class="pi pi-exclamation-triangle text-3xl text-red-400"></i>
+      </div>
+
+      <div class="text-center text-sm">
+        <p v-if="qrStatus === 'CREATING'" class="text-slate-500 dark:text-slate-400">
+          {{ t('tokens.account.qrGenerating') }}
+        </p>
+        <template v-else-if="qrStatus === 'WAITING'">
+          <p class="font-medium text-slate-700 dark:text-slate-200">
+            {{ t('tokens.account.qrWaiting') }}
+          </p>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            {{ t('tokens.account.qrTip') }}
+          </p>
+        </template>
+        <p v-else-if="qrStatus === 'EXPIRED'" class="text-amber-600 dark:text-amber-400">
+          {{ t('tokens.account.qrExpired') }}
+        </p>
+        <p v-else-if="qrStatus === 'FAILED'" class="text-red-600 dark:text-red-400">
+          {{ t('tokens.account.qrFailed') }}<template v-if="qrError">：{{ qrError }}</template>
+        </p>
+      </div>
+    </div>
+
+    <template #footer>
+      <div class="flex items-center justify-end gap-2 w-full mt-4">
+        <Button
+          :label="t('common.action.cancel')"
+          severity="secondary"
+          text
+          @click="qrDialog = false"
+        />
+        <Button
+          v-if="qrStatus === 'EXPIRED' || qrStatus === 'FAILED'"
+          :label="t('tokens.account.qrRetry')"
+          severity="primary"
+          @click="refreshQrSession"
         />
       </div>
     </template>

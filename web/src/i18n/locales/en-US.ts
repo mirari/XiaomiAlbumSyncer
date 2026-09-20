@@ -715,6 +715,16 @@ const messages: typeof zh = {
         'Delete account {name}? All data related to this account will be deleted as well',
       confirmDeleteTitle: 'Confirm deletion',
       confirmDeleteAccept: 'Delete',
+      qrAdd: 'Scan QR to add',
+      qrTitle: 'Scan to sign in with Xiaomi account',
+      qrTip:
+        'Scan with your Xiaomi phone or tablet via Settings > Xiaomi Account, or open the link with any QR scanner to authorize',
+      qrGenerating: 'Fetching QR code…',
+      qrWaiting: 'Waiting for scan confirmation…',
+      qrExpired: 'QR code expired. Please fetch a new one',
+      qrFailed: 'QR login failed',
+      qrRetry: 'Fetch again',
+      qrLoggedIn: 'Account {name} signed in',
     },
     mcp: {
       title: 'MCP Token',
