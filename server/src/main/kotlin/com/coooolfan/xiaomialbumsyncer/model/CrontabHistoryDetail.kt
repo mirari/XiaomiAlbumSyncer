@@ -63,6 +63,7 @@ interface CrontabHistoryDetail {
     /**
      * 生成下载目标路径。
      * - 支持 expressionTargetPath 里的 ${} 插值（含时间格式化前缀）。
+     * - 相对路径模板会拼接到 targetPath 下；绝对路径模板按原样使用。
      * - 若模板为空、无插值项或解析后为空，则回退到旧逻辑。
      */
     fun genFilePath(history: CrontabHistory, asset: Asset): String {
@@ -114,7 +115,10 @@ interface CrontabHistoryDetail {
             return legacyFilePath(history, asset)
         }
 
-        return Path(resolved).normalize().toString()
+        // 相对路径模板拼接到 targetPath 下；绝对路径模板按原样使用
+        val resolvedPath = Path(resolved).normalize()
+        return if (resolvedPath.isAbsolute) resolvedPath.toString()
+        else Path(config.targetPath).resolve(resolvedPath).normalize().toString()
     }
 
     // 旧逻辑：按 targetPath/album/fileName 生成，录音自动加 id 前缀

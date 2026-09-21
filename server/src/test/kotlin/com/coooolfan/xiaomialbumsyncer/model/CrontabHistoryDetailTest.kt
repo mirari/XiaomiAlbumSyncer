@@ -30,7 +30,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("Travel/202405/clip.mp4").normalize().toString()
+        val expected = Path("/base", "Travel/202405/clip.mp4").normalize().toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -44,7 +44,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("Recordings/rec.m4a").toString()
+        val expected = Path("/base", "Recordings/rec.m4a").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -140,7 +140,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("1_Test/photo.jpg").toString()
+        val expected = Path("/base", "1_Test/photo.jpg").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -154,7 +154,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("history_1/photo.jpg").toString()
+        val expected = Path("/base", "history_1/photo.jpg").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -168,7 +168,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("Vacation/sub/Vacation/photo.jpg").toString()
+        val expected = Path("/base", "Vacation/sub/Vacation/photo.jpg").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -182,7 +182,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("My_Album_With_Special_Chars/photo.jpg").toString()
+        val expected = Path("/base", "My_Album_With_Special_Chars/photo.jpg").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -196,7 +196,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("Photos/IMG_20240501_backup.jpg").toString()
+        val expected = Path("/base", "Photos/IMG_20240501_backup.jpg").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -210,7 +210,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("Photos/12345_photo.jpg").toString()
+        val expected = Path("/base", "Photos/12345_photo.jpg").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -224,7 +224,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("video/Media/clip.mp4").toString()
+        val expected = Path("/base", "video/Media/clip.mp4").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -244,7 +244,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("1/通话录音/12345_call.mp3").toString()
+        val expected = Path("/base", "1/通话录音/12345_call.mp3").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -258,7 +258,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("media/photo.jpg").toString()
+        val expected = Path("/base", "media/photo.jpg").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -277,7 +277,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        assertEquals("应用录音", detail.filePath)
+        assertEquals(Path("/base", "应用录音").toString(), detail.filePath)
     }
 
     @Test
@@ -290,7 +290,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("Photos/deadbeef_photo.jpg").toString()
+        val expected = Path("/base", "Photos/deadbeef_photo.jpg").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -304,7 +304,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("title/photo.jpg").toString()
+        val expected = Path("/base", "title/photo.jpg").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -318,7 +318,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("Photos/123_photo.jpg").toString()
+        val expected = Path("/base", "Photos/123_photo.jpg").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -333,7 +333,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("${downloadTime.epochSecond}_${asset.dateTaken.epochSecond}/photo.jpg").toString()
+        val expected = Path("/base", "${downloadTime.epochSecond}_${asset.dateTaken.epochSecond}/photo.jpg").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -349,7 +349,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("2024-05-06/photo.jpg").toString()
+        val expected = Path("/base", "2024-05-06/photo.jpg").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -363,7 +363,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("2024/04/photo.jpg").toString()
+        val expected = Path("/base", "2024/04/photo.jpg").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -377,7 +377,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("20240401/photo.jpg").toString()
+        val expected = Path("/base", "20240401/photo.jpg").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -391,7 +391,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("2024/photo.jpg").toString()
+        val expected = Path("/base", "2024/photo.jpg").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -405,7 +405,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("14-30-45/photo.jpg").toString()
+        val expected = Path("/base", "14-30-45/photo.jpg").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -422,7 +422,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("2024-05-06_20/photo.jpg").toString()
+        val expected = Path("/base", "2024-05-06_20/photo.jpg").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -437,7 +437,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("2024-05-07/photo.jpg").toString()
+        val expected = Path("/base", "2024-05-07/photo.jpg").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -452,7 +452,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("2024-05-06_08/photo.jpg").toString()
+        val expected = Path("/base", "2024-05-06_08/photo.jpg").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -472,7 +472,7 @@ class CrontabHistoryDetailTest {
     }
 
     @Test
-    fun expressionWithRelativePathKeepsRelativePath() {
+    fun expressionWithRelativePathResolvesUnderTargetPath() {
         val template = "relative/\${album}/\${fileName}"
         val config = buildConfig(targetPath = "/base", expressionTargetPath = template)
         val history = buildHistory(config, Instant.parse("2024-05-06T12:00:00Z"))
@@ -481,7 +481,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("relative/Photos/photo.jpg").toString()
+        val expected = Path("/base", "relative/Photos/photo.jpg").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -495,7 +495,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("bar/photo.jpg").toString()
+        val expected = Path("/base", "bar/photo.jpg").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -509,7 +509,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("foo/bar/photo.jpg").toString()
+        val expected = Path("/base", "foo/bar/photo.jpg").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -525,7 +525,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("2024_05_06 Trip/photo.jpg").toString()
+        val expected = Path("/base", "2024_05_06 Trip/photo.jpg").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -539,7 +539,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("What_Ever_/photo.jpg").toString()
+        val expected = Path("/base", "What_Ever_/photo.jpg").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -553,7 +553,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("_Album_/photo.jpg").toString()
+        val expected = Path("/base", "_Album_/photo.jpg").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -567,7 +567,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("Test__Album_/photo.jpg").toString()
+        val expected = Path("/base", "Test__Album_/photo.jpg").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -581,7 +581,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("Photos/photo_test_.jpg").toString()
+        val expected = Path("/base", "Photos/photo_test_.jpg").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -597,7 +597,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("Files/README_copy.").toString()
+        val expected = Path("/base", "Files/README_copy.").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -611,7 +611,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("Files/file.name.with.dots.jpg").toString()
+        val expected = Path("/base", "Files/file.name.with.dots.jpg").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -625,7 +625,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("Photos/\${unknownToken}/photo.jpg").toString()
+        val expected = Path("/base", "Photos/\${unknownToken}/photo.jpg").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -640,7 +640,7 @@ class CrontabHistoryDetailTest {
         val detail = CrontabHistoryDetail.init(history, asset)
 
         // Invalid pattern is preserved as-is
-        val expected = Path("\${download_INVALID}/photo.jpg").toString()
+        val expected = Path("/base", "\${download_INVALID}/photo.jpg").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -668,7 +668,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("我的相册/photo.jpg").toString()
+        val expected = Path("/base", "我的相册/photo.jpg").toString()
         assertEquals(expected, detail.filePath)
     }
 
@@ -682,7 +682,7 @@ class CrontabHistoryDetailTest {
 
         val detail = CrontabHistoryDetail.init(history, asset)
 
-        val expected = Path("Photos/照片.jpg").toString()
+        val expected = Path("/base", "Photos/照片.jpg").toString()
         assertEquals(expected, detail.filePath)
     }
 
