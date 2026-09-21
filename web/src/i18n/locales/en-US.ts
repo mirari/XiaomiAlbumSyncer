@@ -14,6 +14,7 @@ const messages: typeof zh = {
       copy: 'Copy',
       add: 'Add',
       back: 'Back',
+      next: 'Next',
     },
     status: {
       loading: 'Loading…',
@@ -308,11 +309,22 @@ const messages: typeof zh = {
     dayTooltip: '{count} on {dateStr}',
   },
   cronform: {
+    step: {
+      basic: 'Basic Info',
+      scope: 'Sync Scope',
+      mode: 'Sync Mode',
+      schedule: 'Schedule & Storage',
+    },
+    badge: {
+      recommended: 'Recommended',
+      beta: 'Beta',
+    },
     title: {
       create: 'Create scheduled task',
       edit: 'Edit scheduled task',
     },
     field: {
+      defaultName: 'Daily Sync',
       namePlaceholder: 'e.g. Daily sync',
       account: 'Account',
       accountPlaceholder: 'Select a Xiaomi account',
@@ -326,9 +338,9 @@ const messages: typeof zh = {
         'When running in a container, make sure this path is mapped to the host. A folder is created under it for each album.',
       targetPathMountWarning:
         'Warning: this path may only exist inside the container and is not mounted to the host, so data may not be persisted.',
-      expressionTargetPath: 'Expression path (advanced)',
+      useExpressionPath: 'Path template',
       expressionTargetPathHint:
-        'Use expressions to customize the path structure. When set, this overrides the "Save path" above.',
+        'Use a full save path template with variable placeholders. It is recommended to start with / for an absolute path.',
       albums: 'Linked albums',
       albumsPlaceholder: 'Select albums',
     },
@@ -337,6 +349,7 @@ const messages: typeof zh = {
       downloadVideos: 'Download videos',
       downloadAudios: 'Download recordings',
       notify: 'Send notifications',
+      enabled: 'Scheduled trigger',
     },
     notice: {
       text: '{records} are {independent} and {impact} across scheduled tasks. Even for the {sameAsset}, its {status} is {judged} in each task.',

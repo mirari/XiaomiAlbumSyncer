@@ -86,7 +86,11 @@ const formAlbumOptions = computed(() => {
   if (!cronForm.value.accountId) return []
   return (albums.value || [])
     .filter((a) => a.account.id === cronForm.value.accountId && !a.shadow)
-    .map((a) => ({ label: a.name ?? `ID ${a.id}`, value: a.id }))
+    .map((a) => ({
+      label: a.name ?? `ID ${a.id}`,
+      value: a.id,
+      recording: a.remoteId === '-1',
+    }))
 })
 
 watch(
@@ -371,6 +375,7 @@ watch(showHistoryDetailsDialog, (visible) => {
       :account-options="accountOptions"
       :form-album-options="formAlbumOptions"
       :target-path-mount-warning="targetPathMountWarning"
+      :validate-cron-form="validateCronForm"
       @submit="submitCron"
     />
 

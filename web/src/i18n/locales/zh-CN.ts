@@ -12,6 +12,7 @@ export default {
       copy: '复制',
       add: '添加',
       back: '返回',
+      next: '下一步',
     },
     status: {
       loading: '加载中…',
@@ -305,11 +306,22 @@ export default {
     dayTooltip: '{dateStr}：{count} 项',
   },
   cronform: {
+    step: {
+      basic: '基本信息',
+      scope: '同步范围',
+      mode: '同步模式',
+      schedule: '调度与存储',
+    },
+    badge: {
+      recommended: '推荐',
+      beta: 'Beta',
+    },
     title: {
       create: '创建计划任务',
       edit: '编辑计划任务',
     },
     field: {
+      defaultName: '每日同步',
       namePlaceholder: '例如：每日同步',
       account: '归属账号',
       accountPlaceholder: '选择小米账号',
@@ -323,8 +335,9 @@ export default {
         '如在容器环境下运行，请确保已将此路径映射到宿主机。程序将在此路径下创建相册各自的文件夹。',
       targetPathMountWarning:
         '警告：该路径可能仅存在于容器内，未挂载到宿主机，数据可能不会被持久化。',
-      expressionTargetPath: '表达式路径 (高级)',
-      expressionTargetPathHint: '使用表达式自定义路径结构。此值有效将忽略上方的“保存路径”。',
+      useExpressionPath: '路径模板',
+      expressionTargetPathHint:
+        '使用完整的保存路径模板，支持变量占位符。相对路径将从根目录开始解析，建议以 / 开头。',
       albums: '关联相册',
       albumsPlaceholder: '选择相册',
     },
@@ -333,6 +346,7 @@ export default {
       downloadVideos: '下载视频',
       downloadAudios: '下载录音',
       notify: '发送通知',
+      enabled: '定时触发',
     },
     notice: {
       text: '不同计划任务的{records}{independent}，{impact}。即使是{sameAsset}，在不同计划任务中，其{status}也会{judged}。',

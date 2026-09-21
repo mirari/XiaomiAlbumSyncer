@@ -1,3 +1,4 @@
+import { i18n } from '@/i18n'
 import type { CrontabDto } from '@/__generated/model/dto'
 import type { CrontabConfig, CrontabCreateInput } from '@/__generated/model/static'
 import type { CrontabSyncMode } from '@/__generated/model/enums'
@@ -6,6 +7,25 @@ export type Crontab = CrontabDto['CrontabController/DEFAULT_CRONTAB']
 
 export interface LocalCronForm extends Omit<CrontabCreateInput, 'albumIds'> {
   albumIds: number[]
+  // UI 专用：开启后路径输入框编辑 expressionTargetPath（完整模板），关闭时提交为 '' 走默认目录结构
+  useExpressionPath: boolean
+}
+
+// 从模板中提取 $ 之前的字面量前缀作为 targetPath（后端兜底/挂载检查仍需要真实基础路径）
+export function deriveTargetBase(expression: string): string {
+  const literal = expression.split('$', 1)[0]?.replace(/\/+$/, '') ?? ''
+  return literal || '/'
+}
+
+export function buildSubmitConfig(form: LocalCronForm): CrontabConfig {
+  return {
+    ...form.config,
+    // 禁用任务不校验表达式，提交时兜底默认值避免空串
+    expression: form.config.expression.trim() || '0 0 23 * * ?',
+    expressionTargetPath: form.useExpressionPath
+      ? (form.config.expressionTargetPath ?? '').trim()
+      : '',
+  }
 }
 
 export function createDefaultCronConfig(defaultTz: string): CrontabConfig {
@@ -14,7 +34,7 @@ export function createDefaultCronConfig(defaultTz: string): CrontabConfig {
     timeZone: defaultTz,
     targetPath: '/app/download',
     downloadImages: true,
-    downloadVideos: false,
+    downloadVideos: true,
     downloadAudios: true,
     expressionTargetPath: '',
     rewriteExifTime: false,
@@ -33,13 +53,14 @@ export function createDefaultCronConfig(defaultTz: string): CrontabConfig {
 
 export function createEmptyCronForm(defaultTz: string, accountId: number): LocalCronForm {
   return {
-    name: '',
+    name: i18n.global.t('cronform.field.defaultName'),
     description: '',
     enabled: true,
     syncMode: 'TIMELINE' satisfies CrontabSyncMode,
     accountId,
     config: createDefaultCronConfig(defaultTz),
     albumIds: [],
+    useExpressionPath: false,
   }
 }
 
@@ -71,5 +92,6 @@ export function mapCrontabToForm(item: Crontab, fallbackTz: string): LocalCronFo
       notify: item.config.notify ?? true,
     },
     albumIds: [...item.albumIds],
+    useExpressionPath: !!item.config.expressionTargetPath?.trim(),
   }
 }
