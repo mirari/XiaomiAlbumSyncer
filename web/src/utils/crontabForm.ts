@@ -1,5 +1,6 @@
 import type { CrontabDto } from '@/__generated/model/dto'
 import type { CrontabConfig, CrontabCreateInput } from '@/__generated/model/static'
+import type { CrontabSyncMode } from '@/__generated/model/enums'
 
 export type Crontab = CrontabDto['CrontabController/DEFAULT_CRONTAB']
 
@@ -16,7 +17,6 @@ export function createDefaultCronConfig(defaultTz: string): CrontabConfig {
     downloadVideos: false,
     downloadAudios: true,
     expressionTargetPath: '',
-    diffByTimeline: true,
     rewriteExifTime: false,
     rewriteExifTimeZone: defaultTz,
     skipExistingFile: true,
@@ -36,6 +36,7 @@ export function createEmptyCronForm(defaultTz: string, accountId: number): Local
     name: '',
     description: '',
     enabled: true,
+    syncMode: 'TIMELINE' satisfies CrontabSyncMode,
     accountId,
     config: createDefaultCronConfig(defaultTz),
     albumIds: [],
@@ -47,6 +48,7 @@ export function mapCrontabToForm(item: Crontab, fallbackTz: string): LocalCronFo
     name: item.name,
     description: item.description,
     enabled: item.enabled,
+    syncMode: item.syncMode ?? 'TIMELINE',
     accountId: item.accountId,
     config: {
       expression: item.config.expression,
@@ -56,7 +58,6 @@ export function mapCrontabToForm(item: Crontab, fallbackTz: string): LocalCronFo
       downloadVideos: item.config.downloadVideos,
       downloadAudios: item.config.downloadAudios,
       expressionTargetPath: item.config.expressionTargetPath ?? '',
-      diffByTimeline: item.config.diffByTimeline,
       rewriteExifTime: item.config.rewriteExifTime,
       rewriteExifTimeZone: item.config.rewriteExifTimeZone ?? item.config.timeZone ?? fallbackTz,
       skipExistingFile: item.config.skipExistingFile ?? true,

@@ -117,7 +117,6 @@ class ApiE2eSuite {
             "downloadImages" to true,
             "downloadVideos" to false,
             "rewriteExifTime" to false,
-            "diffByTimeline" to false,
             "rewriteExifTimeZone" to "UTC",
             "skipExistingFile" to false,
             "rewriteFileSystemTime" to false,
@@ -135,6 +134,7 @@ class ApiE2eSuite {
             "name" to "API E2E",
             "description" to "Native metadata coverage",
             "enabled" to false,
+            "syncMode" to "FULL",
             "config" to config,
             "accountId" to accountId,
             "albumIds" to listOf(cameraAlbumId),
@@ -418,7 +418,6 @@ class ApiE2eSuite {
             this["downloadVideos"] = false
             this["downloadAudios"] = true
             this["notify"] = false
-            this["diffByTimeline"] = true
         }
         val recordingCrontab = api.json(
             api.post(
@@ -427,6 +426,7 @@ class ApiE2eSuite {
                     "name" to "Recording API E2E",
                     "description" to "Recorder is independent from gallery",
                     "enabled" to false,
+                    "syncMode" to "TIMELINE",
                     "config" to recordingConfig,
                     "accountId" to accountId,
                     "albumIds" to listOf(audioAlbumId),
@@ -445,7 +445,6 @@ class ApiE2eSuite {
             this["downloadVideos"] = false
             this["downloadAudios"] = true
             this["notify"] = false
-            this["diffByTimeline"] = true
         }
         val mixedCrontab = api.json(
             api.post(
@@ -454,6 +453,7 @@ class ApiE2eSuite {
                     "name" to "Mixed API E2E",
                     "description" to "Gallery and recorder full refresh",
                     "enabled" to false,
+                    "syncMode" to "TIMELINE",
                     "config" to mixedConfig,
                     "accountId" to accountId,
                     "albumIds" to listOf(cameraAlbumId, audioAlbumId),
@@ -493,7 +493,6 @@ class ApiE2eSuite {
             this["downloadVideos"] = false
             this["downloadAudios"] = false
             this["notify"] = false
-            this["diffByTimeline"] = false
             this["skipExistingFile"] = false
         }
         val galleryCrontab = api.json(
@@ -503,6 +502,7 @@ class ApiE2eSuite {
                     "name" to "Deleted Gallery E2E",
                     "description" to "云端已删除的相册资产应被跳过而非反复失败",
                     "enabled" to false,
+                    "syncMode" to "FULL",
                     "config" to galleryConfig,
                     "accountId" to accountId,
                     "albumIds" to listOf(cameraAlbumId),
@@ -569,7 +569,6 @@ class ApiE2eSuite {
             this["downloadVideos"] = false
             this["downloadAudios"] = true
             this["notify"] = false
-            this["diffByTimeline"] = false
             this["skipExistingFile"] = false
         }
         val recordingCrontab = api.json(
@@ -579,6 +578,7 @@ class ApiE2eSuite {
                     "name" to "Deleted Recording E2E",
                     "description" to "云端已删除的录音应被跳过而非反复失败",
                     "enabled" to false,
+                    "syncMode" to "FULL",
                     "config" to recordingConfig,
                     "accountId" to accountId,
                     "albumIds" to listOf(audioAlbumId),
@@ -653,7 +653,6 @@ class ApiE2eSuite {
             this["downloadVideos"] = false
             this["downloadAudios"] = false
             this["notify"] = false
-            this["diffByTimeline"] = false
             this["skipExistingFile"] = false
         }
         val crontab = api.json(
@@ -663,6 +662,7 @@ class ApiE2eSuite {
                     "name" to "Transient Storage Error E2E",
                     "description" to "retriable=true 的瞬时错误应在下个周期重试并最终成功",
                     "enabled" to false,
+                    "syncMode" to "FULL",
                     "config" to config,
                     "accountId" to accountId,
                     "albumIds" to listOf(cameraAlbumId),

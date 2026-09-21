@@ -173,6 +173,80 @@ class XiaoMiApi(private val tokenManager: TokenManager) {
         return AlbumTimeline(indexHash, dayCountMap)
     }
 
+    /**
+     * 获取相册级水位快照（/gallery/album/full），用于位点同步模式的变更预检。
+     * 每次返回全量相册快照，无分页。
+     */
+    fun fetchAlbumSyncSnapshot(accountId: Long): List<AlbumSyncInfo> {
+        val req = Request.Builder()
+            .url(apiProperties.url("gallery/album/full?ts=${System.currentTimeMillis()}"))
+            .ua()
+            .authHeader(tokenManager.getAuthPair(accountId))
+            .get()
+            .build()
+
+        val responseTree = client().executeWithRetry(req).use { res ->
+            throwIfNotSuccess(res.code)
+            Solon.context().objectMapper.readTree(res.body)
+        }
+        throwIfBizError(responseTree)
+
+        return responseTree.at("/data/albums").mapNotNull {
+            val albumId = it.get("albumId")?.asLong() ?: return@mapNotNull null
+            AlbumSyncInfo(
+                albumId = albumId,
+                incrementalTag = it.get("incrementalTag")?.asText() ?: "",
+                totalImageCount = it.get("totalImageCount")?.asLong() ?: 0L,
+            )
+        }
+    }
+
+    /**
+     * 按位点拉取单个相册的资产记录页（/gallery/allitems）。
+     * @param tag 续拉位点（服务端返回的 syncTag 原样回传），"0" 表示从相册头部全量回放
+     */
+    fun fetchAllItemsPage(accountId: Long, album: Album, tag: String): AllItemsPage {
+        val req = Request.Builder()
+            .url(
+                apiProperties.url(
+                    "gallery/allitems?ts=${System.currentTimeMillis()}" +
+                        "&groupId=${album.remoteId}&tag=$tag&limit=200&simpleResult=false"
+                )
+            )
+            .ua()
+            .authHeader(tokenManager.getAuthPair(accountId))
+            .get()
+            .build()
+
+        val responseTree = client().executeWithRetry(req).use { res ->
+            throwIfNotSuccess(res.code)
+            Solon.context().objectMapper.readTree(res.body)
+        }
+        throwIfBizError(responseTree)
+
+        val data = responseTree.at("/data")
+        val content = data.get("content") ?: throw IllegalStateException("allitems 响应缺少 data.content")
+        val assets = content
+            // 归档语义：删除记录不进入下载队列，已归档的本地文件保留
+            .filter { it.get("status")?.asText().let { s -> s == null || s == "custom" } }
+            .map { parseJsonNode(it, album) }
+
+        return AllItemsPage(
+            syncTag = data.get("syncTag")?.asText()
+                ?: throw IllegalStateException("allitems 响应缺少 data.syncTag"),
+            lastPage = data.get("lastPage")?.asBoolean() ?: true,
+            assets = assets,
+        )
+    }
+
+    private fun throwIfBizError(responseTree: JsonNode) {
+        val code = responseTree.at("/code").asInt()
+        if (code == 0) return
+        val reason = responseTree.at("/description").asText()
+            .ifBlank { responseTree.at("/reason").asText() }
+        throw IllegalStateException("小米返回错误码 $code ($reason)")
+    }
+
     fun downloadAsset(accountId: Long, asset: Asset, targetPath: Path): Boolean {
         val url =
             if (asset.type == AssetType.AUDIO)
@@ -282,6 +356,18 @@ class XiaoMiApi(private val tokenManager: TokenManager) {
         }
     }
 }
+
+data class AlbumSyncInfo(
+    val albumId: Long,
+    val incrementalTag: String,
+    val totalImageCount: Long,
+)
+
+data class AllItemsPage(
+    val syncTag: String,
+    val lastPage: Boolean,
+    val assets: List<Asset>,
+)
 
 internal fun shouldFetchNextAssetPage(
     audioAlbum: Boolean,

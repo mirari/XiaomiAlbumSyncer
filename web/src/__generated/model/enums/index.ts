@@ -1,5 +1,7 @@
 export type {AssetType} from './AssetType';
 export {AssetType_CONSTANTS} from './AssetType';
+export type {CrontabSyncMode} from './CrontabSyncMode';
+export {CrontabSyncMode_CONSTANTS} from './CrontabSyncMode';
 export type {McpTokenPermission} from './McpTokenPermission';
 export {McpTokenPermission_CONSTANTS} from './McpTokenPermission';
 export type {QrLoginStatus} from './QrLoginStatus';

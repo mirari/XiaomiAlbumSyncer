@@ -82,6 +82,7 @@ export function useCronActions(options: UseCronActionsOptions) {
           name: cronForm.value.name,
           description: cronForm.value.description,
           enabled: cronForm.value.enabled,
+          syncMode: cronForm.value.syncMode,
           config: cronForm.value.config,
           albumIds: cronForm.value.albumIds,
         })
@@ -120,6 +121,7 @@ export function useCronActions(options: UseCronActionsOptions) {
         name: row.name,
         description: row.description,
         enabled: !row.enabled,
+        syncMode: row.syncMode,
         config: row.config,
         albumIds: row.albumIds,
       })

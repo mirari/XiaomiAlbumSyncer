@@ -787,7 +787,6 @@ class CrontabHistoryDetailTest {
             downloadImages = true,
             downloadVideos = true,
             rewriteExifTime = rewriteExifTime,
-            diffByTimeline = false,
             rewriteExifTimeZone = null,
             skipExistingFile = true,
             rewriteFileSystemTime = rewriteFileSystemTime,
@@ -808,6 +807,7 @@ class CrontabHistoryDetailTest {
             name = "Test"
             description = "Test"
             enabled = true
+            syncMode = CrontabSyncMode.FULL
             this.config = config
         }
 

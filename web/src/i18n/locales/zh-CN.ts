@@ -153,6 +153,7 @@ export default {
       notify: '通知',
       exif: '填充 EXIF',
       diffByTimeline: '时间线比对',
+      syncByCursor: '位点增量',
       skipExisting: '跳过已存在',
       rewriteFsTime: '重写文件时间',
       sha1: 'SHA1 校验',
@@ -344,9 +345,13 @@ export default {
     },
     advanced: {
       title: '高级配置',
-      diffByTimeline: '按时间线比对差异',
-      diffByTimelineHint:
-        '通过对比上一次同步的相册时间线，将相册资产的获取范围限定为存在变动的日期。',
+      syncMode: '同步模式',
+      syncModeFull: '全量刷新',
+      syncModeTimeline: '时间线比对',
+      syncModeCursor: '位点增量',
+      syncModeFullHint: '每次同步枚举所选相册的全部资产。',
+      syncModeTimelineHint: '通过对比上一次同步的相册时间线，将获取范围限定为存在变动的日期。',
+      syncModeCursorHint: '按相册水位位点做记录级增量拉取，支持断点续拉。',
       rewriteExifTime: '填充 EXIF 时间',
       rewriteExifTimeHint:
         '将资产在小米云服务的时间写入 EXIF 时间，仅在资产不存在 EXIF 时间时生效。',

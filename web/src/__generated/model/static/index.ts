@@ -1,3 +1,4 @@
+export type {AlbumSyncCursor} from './AlbumSyncCursor';
 export type {AuthenticatorAssertionResponse} from './AuthenticatorAssertionResponse';
 export type {AuthenticatorAttestationResponse} from './AuthenticatorAttestationResponse';
 export type {AuthenticatorSelection} from './AuthenticatorSelection';

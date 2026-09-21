@@ -45,6 +45,21 @@ const accountOptions = computed(() => [...props.accountOptions])
 const formAlbumOptions = computed(() => [...props.formAlbumOptions])
 const timeZones = computed(() => [...props.timeZones])
 
+const syncModeOptions = computed(() => [
+  { label: t('cronform.advanced.syncModeFull'), value: 'FULL' },
+  { label: t('cronform.advanced.syncModeTimeline'), value: 'TIMELINE' },
+  { label: t('cronform.advanced.syncModeCursor'), value: 'CURSOR' },
+])
+
+const syncModeHint = computed(() => {
+  const hints: Record<string, string> = {
+    FULL: t('cronform.advanced.syncModeFullHint'),
+    TIMELINE: t('cronform.advanced.syncModeTimelineHint'),
+    CURSOR: t('cronform.advanced.syncModeCursorHint'),
+  }
+  return hints[form.value.syncMode] ?? ''
+})
+
 const showExpressionHelp = ref(false)
 const showCronHelp = ref(false)
 let hideHelpTimer: number | undefined
@@ -307,13 +322,19 @@ onBeforeUnmount(() => {
 
         <Panel :header="t('cronform.advanced.title')" toggleable>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div class="space-y-1">
-              <div class="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
-                <ToggleSwitch v-model="form.config.diffByTimeline" />
-                <span>{{ t('cronform.advanced.diffByTimeline') }}</span>
-              </div>
+            <div class="space-y-1 sm:col-span-2">
+              <label class="block text-xs font-medium text-slate-500 dark:text-slate-400">{{
+                t('cronform.advanced.syncMode')
+              }}</label>
+              <Select
+                v-model="form.syncMode"
+                :options="syncModeOptions"
+                optionLabel="label"
+                optionValue="value"
+                class="w-full"
+              />
               <div class="text-[10px] text-slate-400 dark:text-slate-500">
-                {{ t('cronform.advanced.diffByTimelineHint') }}
+                {{ syncModeHint }}
               </div>
             </div>
             <div class="space-y-1">

@@ -85,6 +85,7 @@ class DataImporter(
             name = "旧版本导入"
             description = "由旧版本导入时自动创建，仅用于迁移下载历史。此计划任务默认不启用。"
             enabled = false
+            syncMode = CrontabSyncMode.FULL
             config = CrontabConfig(
                 expression = "0 0 * * * ?",
                 timeZone = "Asia/Shanghai",

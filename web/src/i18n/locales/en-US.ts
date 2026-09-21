@@ -155,6 +155,7 @@ const messages: typeof zh = {
       notify: 'Notifications',
       exif: 'Fill EXIF',
       diffByTimeline: 'Timeline diff',
+      syncByCursor: 'Cursor sync',
       skipExisting: 'Skip existing',
       rewriteFsTime: 'Rewrite file time',
       sha1: 'SHA1 check',
@@ -348,9 +349,15 @@ const messages: typeof zh = {
     },
     advanced: {
       title: 'Advanced',
-      diffByTimeline: 'Diff by timeline',
-      diffByTimelineHint:
+      syncMode: 'Sync mode',
+      syncModeFull: 'Full refresh',
+      syncModeTimeline: 'Timeline diff',
+      syncModeCursor: 'Cursor sync',
+      syncModeFullHint: 'Enumerates all assets of the selected albums on every sync.',
+      syncModeTimelineHint:
         'Compares the album timeline from the previous sync and only fetches assets on dates that changed.',
+      syncModeCursorHint:
+        'Record-level incremental fetch driven by per-album cursors, with resumable pagination.',
       rewriteExifTime: 'Fill EXIF time',
       rewriteExifTimeHint:
         "Writes the asset's Xiaomi Cloud time into EXIF, only when the asset has no EXIF time.",
