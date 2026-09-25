@@ -220,7 +220,7 @@ class Mirror:
                 if stage is not None:
                     staged.append((stage, target, item, expected, fingerprint(stage)))
                     continue
-                stage = self.state / 'staging' / run_id / (uuid.uuid4().hex + '.part')
+                stage = safe_path(self.state / 'staging' / run_id, item['path'] + '.part')
                 stage.parent.mkdir(parents=True, exist_ok=True)
                 reuse = None
                 for _, prior in old_by_hash.get(item['sha1'], []):
@@ -251,21 +251,21 @@ class Mirror:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 if target.exists():
                     self._quarantine(target, item['path'], run_id, report, remove=False)
-                # Stage final replacement on same filesystem for atomic publish.
-                temp = target.with_name('.' + target.name + '.' + uuid.uuid4().hex + '.tmp')
                 try:
+                    os.replace(stage, target)
+                except OSError as error:
+                    if error.errno != errno.EXDEV:
+                        raise
+                    # The staged content is already verified. Cross-volume move
+                    # copies directly to its final name without rereading the HDD.
                     try:
-                        os.replace(stage, target)
-                    except OSError as error:
-                        if error.errno != errno.EXDEV:
-                            raise
-                        shutil.copyfile(stage, temp)
-                        if digest(temp) != item['sha1']:
-                            raise ValueError('Copy verification failed')
-                        os.replace(temp, target)
-                        stage.unlink()
-                finally:
-                    temp.unlink(missing_ok=True)
+                        shutil.copyfile(stage, target)
+                        if target.stat().st_size != stage_stamp['size']:
+                            raise ValueError('Copy size mismatch')
+                    except Exception:
+                        target.unlink(missing_ok=True)
+                        raise
+                    stage.unlink()
                 stage.with_suffix('.json').unlink(missing_ok=True)
                 observed[item['path']] = {'sha1': item['sha1'], 'fingerprint': fingerprint(target)}
             # Reconcile this complete snapshot; later cloud changes belong to the next run.

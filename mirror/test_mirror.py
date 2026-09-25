@@ -1,4 +1,6 @@
 import copy
+import errno
+import os
 import hashlib
 import json
 from pathlib import Path
@@ -45,6 +47,36 @@ class EngineTests(unittest.TestCase):
 
     def baseline(self):
         self.mirror.run(True,now=1)
+
+    def cross_volume_replace(self, source, target):
+        if str(source).endswith('.part'):
+            raise OSError(errno.EXDEV, 'cross-device')
+        return os.rename(source, target)
+
+    def test_cross_volume_publish_hashes_only_ssd_stage(self):
+        def check_digest(path):
+            self.assertTrue(Path(path).is_relative_to(self.state))
+            self.assertEqual(Path(path).name, 'a.jpg.part')
+            return digest(path)
+        with patch('engine.os.replace', side_effect=self.cross_volume_replace), patch('engine.digest', side_effect=check_digest) as hashed:
+            self.baseline()
+        self.assertEqual(hashed.call_count, 1)
+        self.assertEqual((self.root/'相机/a.jpg').read_bytes(), b'original')
+        self.assertFalse(list((self.state/'staging').rglob('*.part')))
+
+    def test_failed_direct_copy_keeps_verified_stage_for_retry(self):
+        def fail_copy(source, target):
+            Path(target).write_bytes(b'partial')
+            raise OSError('Disk write failed')
+        with patch('engine.os.replace', side_effect=self.cross_volume_replace), patch('shutil.copyfile', side_effect=fail_copy):
+            with self.assertRaises(OSError):
+                self.baseline()
+        self.assertFalse((self.root/'相机/a.jpg').exists())
+        stages = list((self.state/'staging').rglob('*.part'))
+        self.assertEqual(len(stages), 1)
+        self.assertEqual(stages[0].read_bytes(), b'original')
+        self.cloud.download = Mock(side_effect=AssertionError('No redownload'))
+        self.assertEqual(self.mirror.run(True, now=2)['transfer']['resumed'], 1)
 
     def test_report_never_downloads_or_commits(self):
         result = self.mirror.run(now=1)
