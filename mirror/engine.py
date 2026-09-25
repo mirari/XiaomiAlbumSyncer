@@ -85,14 +85,13 @@ def validate(entries, root):
 
 
 class Mirror:
-    def __init__(self, root, state, provider, confirmations=2, min_delete_age=21600, progress=None, bootstrap_existing=False):
+    def __init__(self, root, state, provider, confirmations=2, progress=None, bootstrap_existing=False):
         self.root = Path(root).resolve()
         self.state = Path(state).resolve()
         if self.state.is_relative_to(self.root) or self.root.is_relative_to(self.state):
             raise ValueError('State and photo roots must be separate')
         self.provider = provider
         self.confirmations = max(2, confirmations)
-        self.min_delete_age = max(0, min_delete_age)
         self.progress = progress or (lambda **kwargs: None)
         self.bootstrap_existing = bootstrap_existing
 
@@ -278,7 +277,7 @@ class Mirror:
                     continue
                 prior = previous['missing'].get(key, {'count': 0, 'since': now})
                 observation = {'count': prior['count'] + 1, 'since': prior['since']}
-                if observation['count'] < self.confirmations or now - observation['since'] < self.min_delete_age:
+                if observation['count'] < self.confirmations:
                     missing[key] = observation
                     # Keep obsolete paths under a unique tombstone key even after same-ID moves.
                     tombstone = key if key not in current else 'obsolete:' + item['path']

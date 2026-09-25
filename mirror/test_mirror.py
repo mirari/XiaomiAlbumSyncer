@@ -41,7 +41,7 @@ class EngineTests(unittest.TestCase):
         base = Path(self.temp.name)
         self.root, self.state = base/'photos',base/'state'
         self.cloud = Provider()
-        self.mirror = Mirror(self.root,self.state,self.cloud,min_delete_age=10)
+        self.mirror = Mirror(self.root,self.state,self.cloud)
 
     def baseline(self):
         self.mirror.run(True,now=1)
@@ -67,16 +67,42 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(old,(self.state/'manifest.json').read_bytes())
         self.assertTrue((self.root/'相机/a.jpg').is_file())
 
-    def test_delete_needs_two_spaced_complete_runs_and_quarantines(self):
+    def test_delete_needs_two_complete_runs_without_time_delay_and_quarantines(self):
         self.baseline()
         self.cloud.entries = {}
         self.mirror.run(True,now=2)
-        self.mirror.run(True,now=3)
         self.assertTrue((self.root/'相机/a.jpg').exists())
-        report = self.mirror.run(True,now=20)
+        report = self.mirror.run(True,now=2)
         self.assertEqual(report['quarantined'],['相机/a.jpg'])
         self.assertFalse((self.root/'相机/a.jpg').exists())
         self.assertEqual(list((self.state/'quarantine').rglob('a.jpg'))[0].read_bytes(),b'original')
+
+    def test_reappearance_resets_delete_confirmation(self):
+        self.baseline()
+        original = copy.deepcopy(self.cloud.entries)
+        self.cloud.entries = {}
+        self.mirror.run(True, now=2)
+        self.cloud.entries = original
+        self.mirror.run(True, now=3)
+        self.cloud.entries = {}
+        self.mirror.run(True, now=4)
+        self.assertTrue((self.root/'相机/a.jpg').exists())
+        self.mirror.run(True, now=4)
+        self.assertFalse((self.root/'相机/a.jpg').exists())
+
+    def test_failed_run_does_not_advance_delete_confirmation(self):
+        self.baseline()
+        self.cloud.entries = {}
+        old = (self.state/'manifest.json').read_bytes()
+        self.cloud.unstable = True
+        self.cloud.entries = {'new':item('相机/b.jpg')}
+        self.cloud.calls = 0
+        with self.assertRaises(ValueError): self.mirror.run(True, now=2)
+        self.assertEqual(old, (self.state/'manifest.json').read_bytes())
+        self.cloud.unstable = False
+        self.cloud.entries = {}
+        self.mirror.run(True, now=3)
+        self.assertTrue((self.root/'相机/a.jpg').exists())
 
     def test_bad_replacement_keeps_old(self):
         self.baseline()
