@@ -1,0 +1,9 @@
+{
+  "database": "/xas-db/xiaomialbumsyncer.db",
+  "account_id": 2,
+  "root": "/photos",
+  "state": "/state",
+  "include_audio": false,
+  "timezone": "Asia/Shanghai",
+  "time": "03:00"
+}
