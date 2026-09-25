@@ -13,6 +13,17 @@ class CloudError(RuntimeError):
     pass
 
 
+def recording_name(name):
+    """Match upstream parseXiaomiRecordingName, including its legacy fallback."""
+    match = re.fullmatch(r'(.+)\.([^._]+)_(\d+)_(\d+)_(\d+)_(\d+)', name)
+    if match:
+        return match[1] + '.' + match[2]
+    for _ in range(4):
+        if '_' in name:
+            name = name.rsplit('_', 1)[0]
+    return name
+
+
 def segment(name):
     # Reject ambiguous Windows names, rather than silently map two names to one path.
     if (not name or name in ('.', '..') or name[-1:] in (' ', '.')
@@ -141,7 +152,7 @@ class Xiaomi:
                     key = 'audio:'+str(asset['id'])
                     if key in entries:
                         raise CloudError('Duplicate recording page')
-                    entries[key] = {'path':'录音/'+str(asset['id'])+'_'+segment(asset['name']), 'sha1':asset['sha1'].lower(), 'size':int(asset.get('size') or 0)}
+                    entries[key] = {'path':'录音/'+str(asset['id'])+'_'+segment(recording_name(asset['name'])), 'sha1':asset['sha1'].lower(), 'size':int(asset.get('size') or 0)}
                     self.assets[key] = ('audio',str(asset['id']))
                 if len(data['list']) < 500:
                     break

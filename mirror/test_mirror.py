@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import Mock, patch
 import worker
 from engine import Mirror
-from xiaomi import Xiaomi, CloudError, segment
+from xiaomi import Xiaomi, CloudError, segment, recording_name
 
 
 def item(path, body=b'original'):
@@ -176,6 +176,31 @@ class EngineTests(unittest.TestCase):
 
 
 class AdapterTests(unittest.TestCase):
+    def test_recording_names_match_upstream(self):
+        for source, expected in (
+            ('phone.mp3_78_1_1658720546000_1666531492635', 'phone.mp3'),
+            ('meeting.m4a_686_0_1641032438000_1666737108163', 'meeting.m4a'),
+            ('app_recording.aac_4054_3_17785072729_1778632353827', 'app_recording.aac'),
+            ('sample-audio.m4a_device_location_type_suffix', 'sample-audio.m4a'),
+            ('plain.mp3', 'plain.mp3'),
+        ):
+            self.assertEqual(recording_name(source), expected)
+
+    def test_existing_upstream_recording_is_adopted_without_download(self):
+        cloud = Xiaomi('/unused', 1, include_audio=True)
+        cloud._albums = lambda: {'1': {'name':'相机','count':0}}
+        body = b'existing recording'
+        cloud._json = lambda endpoint, params: ({'list': [dict(id=123, name='meeting.mp3_45_0_100_200', sha1=hashlib.sha1(body).hexdigest(), size=len(body))]} if endpoint.startswith('sfs/') else {'isLastPage':True})
+        cloud.download = Mock(side_effect=AssertionError('Existing recording must not be downloaded'))
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)/'photos'
+            (root/'录音').mkdir(parents=True)
+            (root/'录音/123_meeting.mp3').write_bytes(body)
+            result = Mirror(root, Path(temp)/'state', cloud).run(True)
+            self.assertEqual(result['status'], 'completed')
+            cloud.download.assert_not_called()
+            self.assertEqual(len(list(root.rglob('*.mp3'))), 1)
+
     def test_selected_album_scope_and_type_filters(self):
         cloud = Xiaomi('/unused', 1, album_ids=['2'], include_images=False)
         cloud._albums = lambda: {'1': {'name':'相机', 'count':5}, '2': {'name':'旅行', 'count':2}}
