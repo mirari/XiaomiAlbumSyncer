@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import Button from 'primevue/button'
+import MirrorTaskPanel from '@/components/MirrorTaskPanel.vue'
 import Chip from 'primevue/chip'
 import Menu from 'primevue/menu'
 import Tag from 'primevue/tag'
@@ -160,6 +161,7 @@ const lastRunStatus = computed(() => {
 const enabledOptionTags = computed(() => {
   const c = props.crontab.config
   if (!c) return [] as string[]
+  if (c.syncMode === 'MIRROR') return ['单向镜像', c.mirrorReportOnly ? '仅报告' : '实际同步', c.mirrorAllAlbums ? '全部相册（含新增）' : '指定相册']
   const tags: string[] = []
   if (c.downloadImages) tags.push(t('schedule.options.images'))
   if (c.downloadVideos) tags.push(t('schedule.options.videos'))
@@ -177,6 +179,7 @@ const moreMenu = ref<InstanceType<typeof Menu> | null>(null)
 const moreMenuOpen = ref(false)
 const moreMenuItems = computed(() => {
   const items: Array<{ label: string; icon: string; command: () => void }> = []
+  if (props.crontab.config.syncMode === 'MIRROR') return items
   if (props.crontab.config?.rewriteExifTime) {
     items.push({
       label: t('schedule.row.menu.fillExif'),
@@ -403,6 +406,7 @@ onUnmounted(() => {
 
       <!-- last run -->
       <span
+        v-if="crontab.config.syncMode !== 'MIRROR'"
         class="hidden shrink-0 items-center gap-1.5 text-[11px] sm:flex"
         :class="lastRunStatus ? lastRunStatus.class : 'text-slate-300 dark:text-slate-600'"
       >
@@ -490,7 +494,8 @@ onUnmounted(() => {
             >
           </div>
 
-          <div class="flex flex-wrap items-center gap-1.5">
+          <p v-if="crontab.config.syncMode === 'MIRROR' && crontab.config.mirrorAllAlbums" class="text-xs text-slate-500">每次执行自动读取该账号全部相册，包括未来新增相册。</p>
+          <div v-else class="flex flex-wrap items-center gap-1.5">
             <Chip
               v-for="id in crontab.albumIds"
               :key="id"
@@ -512,7 +517,8 @@ onUnmounted(() => {
         </div>
 
         <!-- right: stats + history -->
-        <div class="min-w-0 space-y-3">
+        <MirrorTaskPanel v-if="crontab.config.syncMode === 'MIRROR'" :task-id="crontab.id" />
+        <div v-else class="min-w-0 space-y-3">
           <div
             v-if="crontab.running"
             class="rounded-md border border-blue-200/60 bg-blue-50/60 p-3 dark:border-blue-900/50 dark:bg-blue-950/20"

@@ -6,6 +6,7 @@ on:
 permissions:
   contents: write
   issues: write
+  actions: write
 concurrency:
   group: mirror-upstream-sync
   cancel-in-progress: false
@@ -69,6 +70,7 @@ jobs:
         run: |
           gh auth setup-git
           git push origin HEAD:main
+          gh workflow run full-image.yml --ref main
       - name: Report blocked update
         if: failure()
         env:

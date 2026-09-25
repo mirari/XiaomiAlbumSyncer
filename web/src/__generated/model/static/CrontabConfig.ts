@@ -1,4 +1,7 @@
 export interface CrontabConfig {
+    readonly syncMode?: string;
+    readonly mirrorAllAlbums?: boolean;
+    readonly mirrorReportOnly?: boolean;
     readonly expression: string;
     readonly timeZone: string;
     readonly targetPath: string;

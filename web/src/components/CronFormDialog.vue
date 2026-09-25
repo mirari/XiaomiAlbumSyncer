@@ -105,6 +105,18 @@ onBeforeUnmount(() => {
     <div class="flex gap-8 items-start">
       <div class="flex-1 space-y-4 min-w-0">
         <div class="space-y-2">
+          <label class="block text-sm">同步模式</label>
+          <Select v-model="form.config.syncMode" class="w-full"
+            :options="[{label: '增量备份（原有模式）', value: 'ADD_ONLY'}, {label: '单向镜像（云端 → 本地）', value: 'MIRROR'}]"
+            optionLabel="label" optionValue="value" />
+        </div>
+        <div v-if="form.config.syncMode === 'MIRROR'" class="space-y-3 rounded border p-3 text-sm">
+          <label class="flex items-center gap-2"><ToggleSwitch v-model="form.config.mirrorAllAlbums" />全部相册，包括相机和未来新增相册</label>
+          <label class="flex items-center gap-2"><ToggleSwitch v-model="form.config.mirrorReportOnly" />仅生成报告，不下载或清理文件</label>
+          <p>关闭报告模式后按云端相册名保存。旧文件经两次确认后移入隔离区，不永久删除。不改写 EXIF 或文件时间。</p>
+          <p>每个账号使用独立目标目录。首次建立基线后，如需更改范围或目录，请新建任务。</p>
+        </div>
+        <div class="space-y-2">
           <label class="block text-xs font-medium text-slate-500 dark:text-slate-400">{{
             t('common.field.name')
           }}</label>
@@ -238,6 +250,7 @@ onBeforeUnmount(() => {
           </div>
           <InputText
             v-model="form.config.expressionTargetPath"
+            :disabled="form.config.syncMode === 'MIRROR'"
             placeholder="/app/download/${album}/${download_YYYYMM}/${fileName}"
             class="w-full"
             @focus="openExpressionHelp"
@@ -261,7 +274,7 @@ onBeforeUnmount(() => {
             <span>{{ t('cronform.toggle.downloadAudios') }}</span>
           </div>
           <div class="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-            <ToggleSwitch v-model="form.config.notify" />
+            <ToggleSwitch v-model="form.config.notify" :disabled="form.config.syncMode === 'MIRROR'" />
             <span>{{ t('cronform.toggle.notify') }}</span>
           </div>
         </div>
@@ -271,6 +284,7 @@ onBeforeUnmount(() => {
             t('cronform.field.albums')
           }}</label>
           <MultiSelect
+            :disabled="form.config.syncMode === 'MIRROR' && form.config.mirrorAllAlbums"
             v-model="form.albumIds"
             :options="formAlbumOptions"
             display="chip"
@@ -282,7 +296,7 @@ onBeforeUnmount(() => {
           />
         </div>
 
-        <Message severity="info" variant="simple" icon="pi pi-info-circle">
+        <Message v-if="form.config.syncMode !== 'MIRROR'" severity="info" variant="simple" icon="pi pi-info-circle">
           <i18n-t keypath="cronform.notice.text" tag="div" class="text-[12px]">
             <template #records>
               <span class="font-semibold">{{ t('cronform.notice.records') }}</span>
@@ -305,7 +319,7 @@ onBeforeUnmount(() => {
           </i18n-t>
         </Message>
 
-        <Panel :header="t('cronform.advanced.title')" toggleable>
+        <Panel v-if="form.config.syncMode !== 'MIRROR'" :header="t('cronform.advanced.title')" toggleable>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div class="space-y-1">
               <div class="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">

@@ -57,7 +57,7 @@ def validate(entries, root):
 
 
 class Mirror:
-    def __init__(self, root, state, provider, confirmations=2, min_delete_age=21600):
+    def __init__(self, root, state, provider, confirmations=2, min_delete_age=21600, progress=None):
         self.root = Path(root).resolve()
         self.state = Path(state).resolve()
         if self.state.is_relative_to(self.root) or self.root.is_relative_to(self.state):
@@ -65,6 +65,7 @@ class Mirror:
         self.provider = provider
         self.confirmations = max(2, confirmations)
         self.min_delete_age = max(0, min_delete_age)
+        self.progress = progress or (lambda **kwargs: None)
 
     def run(self, apply=False, now=None):
         self.state.mkdir(parents=True, exist_ok=True)
@@ -80,6 +81,7 @@ class Mirror:
         if previous.get('root', str(self.root)) != str(self.root):
             raise ValueError('Photo root changed; a new state directory is required')
         # Provider must return only after ALL pages and stability checks succeed.
+        self.progress(phase='scanning', completed=0, total=0)
         current = self.provider.snapshot()
         source = getattr(self.provider, 'identity', 'test-provider')
         if previous.get('source', source) != source:
@@ -119,7 +121,8 @@ class Mirror:
         old_paths = {v['path']: v for v in old.values()}
         try:
             # Download and verify ALL replacements before changing any managed file.
-            for key, item in current.items():
+            for index, (key, item) in enumerate(current.items()):
+                self.progress(phase='verifying_and_downloading', completed=index, total=len(current))
                 target = safe_path(self.root, item['path'])
                 if target.exists() and digest(target) == item['sha1']:
                     continue
@@ -155,11 +158,13 @@ class Mirror:
                     temp.unlink(missing_ok=True)
                     stage.unlink(missing_ok=True)
             # A second cloud read must match before cleaning ANY obsolete path.
+            self.progress(phase='rechecking_cloud', completed=len(current), total=len(current))
             if self.provider.snapshot() != current:
                 raise ValueError('Cloud changed during download; cleanup deferred')
             for item in current.values():
                 if digest(safe_path(self.root, item['path'])) != item['sha1']:
                     raise ValueError('Final verification failed; cleanup deferred')
+            self.progress(phase='reconciling', completed=len(current), total=len(current))
             active_paths = {v['path'] for v in current.values()}
             missing = {}
             retained = dict(current)

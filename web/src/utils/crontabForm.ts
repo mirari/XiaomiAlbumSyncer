@@ -28,6 +28,9 @@ export function createDefaultCronConfig(defaultTz: string): CrontabConfig {
     exifProcessors: 2,
     fileTimeWorkers: 2,
     notify: true,
+    syncMode: 'ADD_ONLY',
+    mirrorAllAlbums: true,
+    mirrorReportOnly: true,
   }
 }
 
@@ -68,6 +71,9 @@ export function mapCrontabToForm(item: Crontab, fallbackTz: string): LocalCronFo
       exifProcessors: item.config.exifProcessors ?? 2,
       fileTimeWorkers: item.config.fileTimeWorkers ?? 2,
       notify: item.config.notify ?? true,
+      syncMode: item.config.syncMode ?? 'ADD_ONLY',
+      mirrorAllAlbums: item.config.mirrorAllAlbums ?? true,
+      mirrorReportOnly: item.config.mirrorReportOnly ?? true,
     },
     albumIds: [...item.albumIds],
   }
