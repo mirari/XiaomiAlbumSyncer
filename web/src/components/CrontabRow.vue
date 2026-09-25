@@ -128,7 +128,8 @@ function gotoHistoryPage(delta: number) {
 watch(
   () => props.expanded,
   (expanded) => {
-    if (expanded && !historyLoaded.value) loadHistoryGroups()
+    if (expanded && props.crontab.config.syncMode !== 'MIRROR' && !historyLoaded.value)
+      loadHistoryGroups()
   },
 )
 
@@ -161,7 +162,12 @@ const lastRunStatus = computed(() => {
 const enabledOptionTags = computed(() => {
   const c = props.crontab.config
   if (!c) return [] as string[]
-  if (c.syncMode === 'MIRROR') return ['单向镜像', c.mirrorReportOnly ? '仅报告' : '实际同步', c.mirrorAllAlbums ? '全部相册（含新增）' : '指定相册']
+  if (c.syncMode === 'MIRROR')
+    return [
+      '单向镜像',
+      c.mirrorReportOnly ? '仅报告' : '实际同步',
+      c.mirrorAllAlbums ? '全部相册（含新增）' : '指定相册',
+    ]
   const tags: string[] = []
   if (c.downloadImages) tags.push(t('schedule.options.images'))
   if (c.downloadVideos) tags.push(t('schedule.options.videos'))
@@ -212,24 +218,42 @@ const lastFetchTime = ref(0)
 const now = ref(Date.now())
 let pollTimer: number | undefined
 let nowTimer: number | undefined
+let fetchingStats = false
+let disposed = false
 
 async function fetchStats() {
-  if (!props.crontab.id) return
+  if (!props.crontab.id || fetchingStats || disposed) return
+  fetchingStats = true
   try {
+    // Mirror executions do not populate the native download pipeline statistics.
+    if (props.crontab.config.syncMode === 'MIRROR') {
+      const tasks = await api.crontabController.listCrontabs()
+      if (disposed) return
+      const task = tasks.find((task) => String(task.id) === String(props.crontab.id))
+      if (!task?.running) {
+        stopPolling()
+        emit('refresh')
+      }
+      return
+    }
     currentStats.value = await api.crontabController.getCrontabCurrentStats({
       crontabId: props.crontab.id,
     })
+    if (disposed) return
     if (!currentStats.value.ts) {
       emit('refresh')
     }
     lastFetchTime.value = Date.now()
   } catch (e: unknown) {
+    if (disposed) return
     console.debug('Failed to fetch stats', e)
     const msg = e instanceof Error ? e.message : String(e)
     if (msg.includes('没有正在运行')) {
       stopPolling()
       emit('refresh')
     }
+  } finally {
+    fetchingStats = false
   }
 }
 
@@ -237,7 +261,10 @@ function startPolling() {
   if (polling.value) return
   polling.value = true
   fetchStats()
-  pollTimer = window.setInterval(fetchStats, 1000)
+  pollTimer = window.setInterval(
+    fetchStats,
+    props.crontab.config.syncMode === 'MIRROR' ? 5000 : 1000,
+  )
   nowTimer = window.setInterval(() => {
     now.value = Date.now()
   }, 200)
@@ -277,6 +304,7 @@ watch(
 )
 
 onUnmounted(() => {
+  disposed = true
   stopPolling()
 })
 </script>
@@ -494,7 +522,12 @@ onUnmounted(() => {
             >
           </div>
 
-          <p v-if="crontab.config.syncMode === 'MIRROR' && crontab.config.mirrorAllAlbums" class="text-xs text-slate-500">每次执行自动读取该账号全部相册，包括未来新增相册。</p>
+          <p
+            v-if="crontab.config.syncMode === 'MIRROR' && crontab.config.mirrorAllAlbums"
+            class="text-xs text-slate-500"
+          >
+            每次执行自动读取该账号全部相册，包括未来新增相册。
+          </p>
           <div v-else class="flex flex-wrap items-center gap-1.5">
             <Chip
               v-for="id in crontab.albumIds"
