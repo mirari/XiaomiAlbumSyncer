@@ -44,4 +44,8 @@ data class CrontabConfig(
     val expressionTargetPath: String = "",
 
     val notify: Boolean = true,
+
+    val syncMode: String = "ADD_ONLY",
+    val mirrorAllAlbums: Boolean = true,
+    val mirrorReportOnly: Boolean = true,
 )

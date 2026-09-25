@@ -130,6 +130,8 @@ export function useCronForm(getDefaultAccountId: () => number) {
       errors.targetPath = i18n.global.t('cronform.errors.required')
     if (!cronForm.value.accountId)
       errors.accountId = i18n.global.t('cronform.errors.requiredSelect')
+    if (cronForm.value.config.syncMode === 'MIRROR' && !cronForm.value.config.mirrorAllAlbums && !cronForm.value.albumIds.length)
+      errors.name = '请选择相册，或启用全部相册'
 
     formErrors.value = errors
     return Object.keys(errors).length === 0
@@ -161,6 +163,13 @@ export function useCronForm(getDefaultAccountId: () => number) {
       }
     },
   )
+
+  watch(() => cronForm.value.config.syncMode, (mode) => {
+    if (mode === 'MIRROR') cronForm.value = {
+      ...cronForm.value,
+      config: { ...cronForm.value.config, expressionTargetPath: '', rewriteExifTime: false, rewriteFileSystemTime: false, notify: false },
+    }
+  })
 
   watch(
     () => cronForm.value.config.targetPath,

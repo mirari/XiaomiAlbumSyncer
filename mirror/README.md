@@ -1,4 +1,7 @@
-# 小米云单向镜像（实验性）
+# 小米云单向镜像执行模块
+
+**完整应用部署及网页任务管理请阅读 [网页单向镜像说明](../README/MIRROR.md)。**
+以下为执行模块的独立开发、测试方式；完整应用由 XAS 管理配置和调度，无需另起服务。
 
 此 fork 基于 Coooolfan/XiaomiAlbumSyncer 主线，增加独立 Python 镜像服务。
 设计参考 [Acckion fork](https://github.com/Acckion/XiaomiAlbumSyncer) 的云端对账思路，

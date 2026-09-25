@@ -32,6 +32,7 @@ class CrontabService(private val sql: KSqlClient) {
     private val log = LoggerFactory.getLogger(this.javaClass)
 
     fun createCrontab(input: CrontabCreateInput, fetcher: Fetcher<Crontab>): Crontab {
+        validateMode(input.config)
         val execute = sql.saveCommand(input, SaveMode.INSERT_ONLY).execute(fetcher)
         taskScheduler.initJobs()
         return execute.modifiedEntity
@@ -44,6 +45,7 @@ class CrontabService(private val sql: KSqlClient) {
     }
 
     fun deleteCrontab(id: Long) {
+        require(!isCrontabRunning(id)) { "Stop the running task before deleting it" }
         sql.executeDelete(Crontab::class) {
             where(table.id eq id)
         }
@@ -120,9 +122,19 @@ class CrontabService(private val sql: KSqlClient) {
 
 
     fun updateCrontab(crontab: Crontab, fetcher: Fetcher<Crontab>): Crontab {
+        require(!isCrontabRunning(crontab.id)) { "Stop the running task before editing it" }
+        if (org.babyfish.jimmer.ImmutableObjects.isLoaded(crontab, "config")) validateMode(crontab.config)
         val execute = sql.saveCommand(crontab, SaveMode.UPDATE_ONLY).execute(fetcher)
         taskScheduler.initJobs()
         return execute.modifiedEntity
+    }
+
+    private fun validateMode(config: CrontabConfig) {
+        require(config.syncMode in setOf("ADD_ONLY", "MIRROR")) { "Unknown sync mode" }
+        if (config.syncMode == "MIRROR") {
+            require(config.expressionTargetPath.isBlank()) { "Mirror mode requires an ordinary target directory" }
+            require(config.downloadImages || config.downloadVideos || config.downloadAudios) { "Select at least one media type" }
+        }
     }
 
     fun executeCrontab(crontabId: Long) {

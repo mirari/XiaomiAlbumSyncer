@@ -23,7 +23,7 @@ def segment(name):
 
 
 class Xiaomi:
-    def __init__(self, database, account_id, include_audio=False):
+    def __init__(self, database, account_id, include_audio=False, album_ids=None, include_images=True, include_videos=True):
         self.database = database
         self.account_id = account_id
         self.include_audio = include_audio
@@ -32,6 +32,9 @@ class Xiaomi:
         self.cookie = None
         self.expires = 0
         self.assets = {}
+        self.album_ids = None if album_ids is None else set(map(str, album_ids))
+        self.include_images = include_images
+        self.include_videos = include_videos
 
     def _request(self, url, cookie=None, **kwargs):
         host = urlparse(url).hostname or ''
@@ -98,8 +101,12 @@ class Xiaomi:
 
     def snapshot(self):
         albums = self._albums()
+        if self.album_ids is not None and not self.album_ids.issubset(albums):
+            raise CloudError('Selected album missing; review task scope before continuing')
         entries = {}
         for album_id, album in albums.items():
+            if self.album_ids is not None and album_id not in self.album_ids:
+                continue
             found = 0
             for page in range(100000):
                 data = self._json('gallery/user/galleries', {'albumId':album_id,'pageNum':page,'pageSize':200})
@@ -110,12 +117,15 @@ class Xiaomi:
                 if not isinstance(data.get('galleries'),list) or not isinstance(data.get('isLastPage'),bool):
                     raise CloudError('Incomplete photo page')
                 for asset in data['galleries']:
+                    found += 1
+                    kind = str(asset.get('type', 'image')).lower()
+                    if (kind == 'image' and not self.include_images) or (kind == 'video' and not self.include_videos):
+                        continue
                     key = 'photo:'+album_id+':'+str(asset['id'])
                     if key in entries:
                         raise CloudError('Duplicate asset page')
                     entries[key] = {'path':segment(album['name'])+'/'+segment(asset['fileName']), 'sha1':asset['sha1'].lower(), 'size':int(asset.get('size') or 0)}
                     self.assets[key] = ('photo',str(asset['id']))
-                    found += 1
                 if data['isLastPage']:
                     break
             else:

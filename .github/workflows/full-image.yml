@@ -1,0 +1,80 @@
+name: Full XAS image
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['server/**', 'web/**', 'mirror/**', 'docker/Dockerfile.full*', '.github/workflows/full-image.yml']
+  pull_request:
+    paths: ['server/**', 'web/**', 'mirror/**', 'docker/Dockerfile.full*', '.github/workflows/full-image.yml']
+permissions:
+  contents: read
+concurrency:
+  group: full-image-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    if: github.repository == 'mirari/XiaomiAlbumSyncer'
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - run: pip install -r mirror/requirements.txt && python -m unittest discover -s mirror -v
+      - uses: docker/setup-buildx-action@v3
+      - name: Login to GHCR
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build full application
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.full
+          platforms: linux/amd64
+          load: true
+          tags: xas-full:ci
+          cache-from: type=gha,scope=full-image
+          cache-to: type=gha,mode=max,scope=full-image
+      - name: Validate web-managed mirror lifecycle
+        run: |
+          fixture=$(mktemp -d)
+          mkdir -p "$fixture/photos" "$fixture/state"
+          printf '{}' > "$fixture/scenario.json"
+          docker run -d --name xas-mirror-ci -p 127.0.0.1:18232:8080 \
+            -e MIRROR_WORKER=/fixture/worker.py -e MIRROR_STATE_DIR=/app/mirror-state \
+            -v "$fixture:/fixture" -v "$fixture/photos:/photos" -v "$fixture/state:/app/mirror-state" \
+            -v "$PWD/mirror/integration-fixture.py:/fixture/worker.py:ro" xas-full:ci
+          trap 'docker rm -f xas-mirror-ci >/dev/null' EXIT
+          for attempt in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:18232/ >/dev/null; then break; fi
+            sleep 1
+          done
+          python mirror/integration-test.py http://127.0.0.1:18232 "$fixture"
+      - name: Publish validated image
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.full
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/mirari/xiaomi-album-syncer:sha-${{ github.sha }}
+            ghcr.io/mirari/xiaomi-album-syncer:mirror-edge
+          labels: |
+            org.opencontainers.image.source=https://github.com/mirari/XiaomiAlbumSyncer
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.description=Full XAS with web-managed cloud mirror tasks
+            org.opencontainers.image.licenses=GPL-3.0
+          cache-from: type=gha,scope=full-image
+          cache-to: type=gha,mode=max,scope=full-image

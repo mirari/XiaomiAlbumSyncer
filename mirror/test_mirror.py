@@ -4,7 +4,8 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
+import worker
 from engine import Mirror
 from xiaomi import Xiaomi, CloudError, segment
 
@@ -175,6 +176,14 @@ class EngineTests(unittest.TestCase):
 
 
 class AdapterTests(unittest.TestCase):
+    def test_selected_album_scope_and_type_filters(self):
+        cloud = Xiaomi('/unused', 1, album_ids=['2'], include_images=False)
+        cloud._albums = lambda: {'1': {'name':'相机', 'count':5}, '2': {'name':'旅行', 'count':2}}
+        cloud._json = lambda *a, **k: {'galleries': [dict(id=1,fileName='a.jpg',sha1='a'*40,type='image'), dict(id=2,fileName='b.mp4',sha1='b'*40,type='video')], 'isLastPage':True}
+        self.assertEqual(list(cloud.snapshot()), ['photo:2:2'])
+        cloud.album_ids = {'missing'}
+        with self.assertRaises(CloudError): cloud.snapshot()
+
     def test_download_hosts_do_not_receive_account_cookies(self):
         cloud = Xiaomi('/unused',1)
         cloud.session.request = Mock(return_value=Mock(status_code=200))
@@ -207,6 +216,24 @@ class AdapterTests(unittest.TestCase):
     def test_unsafe_names(self):
         for name in ('../a','CON','a:stream','a.','LPT1.jpg'):
             with self.assertRaises(CloudError): segment(name)
+
+
+class WorkerTests(unittest.TestCase):
+    def test_report_apply_and_scope_change(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            cfg = {'database':'unused', 'account_id':1, 'root':str(base/'photos'), 'state':str(base/'state'), 'run_dir':str(base/'run'), 'apply':False, 'album_ids':None}
+            cloud = Provider()
+            with patch.object(worker, 'Xiaomi', return_value=cloud):
+                worker.execute(cfg)
+                self.assertTrue((base/'run/report.json').is_file())
+                self.assertFalse((base/'photos').exists())
+                cfg['apply'] = True
+                worker.execute(cfg)
+                self.assertEqual((base/'photos/相机/a.jpg').read_bytes(), b'original')
+                cfg['album_ids'] = ['changed']
+                with self.assertRaises(CloudError): worker.execute(cfg)
+                self.assertEqual((base/'photos/相机/a.jpg').read_bytes(), b'original')
 
 
 if __name__ == '__main__':
