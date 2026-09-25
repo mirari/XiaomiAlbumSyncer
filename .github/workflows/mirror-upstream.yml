@@ -1,0 +1,86 @@
+name: Mirror upstream sync
+on:
+  schedule:
+    - cron: '17 18 * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+  issues: write
+concurrency:
+  group: mirror-upstream-sync
+  cancel-in-progress: false
+jobs:
+  sync:
+    if: github.repository == 'mirari/XiaomiAlbumSyncer'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Merge upstream candidate
+        id: candidate
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch https://github.com/Coooolfan/XiaomiAlbumSyncer.git main
+          if git merge-base --is-ancestor FETCH_HEAD HEAD; then
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+            git merge --no-edit FETCH_HEAD
+          fi
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Mirror regression tests
+        run: |
+          pip install -r mirror/requirements.txt
+          python -m unittest discover -s mirror -v
+          docker build -f mirror/Dockerfile -t xas-mirror:test .
+          docker run --rm xas-mirror:test --help
+      - uses: actions/setup-java@v5
+        if: steps.candidate.outputs.changed == 'true'
+        with:
+          java-version: '25'
+          distribution: temurin
+      - name: Compile upstream backend
+        if: steps.candidate.outputs.changed == 'true'
+        working-directory: server
+        run: bash ./gradlew clean compileKotlin
+      - uses: actions/setup-node@v7
+        if: steps.candidate.outputs.changed == 'true'
+        with:
+          node-version: '24.20.0'
+      - name: Build upstream frontend
+        if: steps.candidate.outputs.changed == 'true'
+        working-directory: web
+        run: |
+          corepack enable
+          corepack prepare yarn@4.18.0 --activate
+          yarn install --immutable
+          yarn build
+      - name: Advance main only after validation
+        if: steps.candidate.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh auth setup-git
+          git push origin HEAD:main
+      - name: Report blocked update
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title='Upstream synchronization requires review'
+          number=$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')
+          body="Automatic synchronization stopped. The main branch was not force-updated. Inspect $RUN_URL for merge, build, or permission failures."
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi

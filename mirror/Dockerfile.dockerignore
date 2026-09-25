@@ -1,0 +1,5 @@
+**
+!mirror/
+!mirror/*.py
+!mirror/requirements.txt
+!mirror/Dockerfile

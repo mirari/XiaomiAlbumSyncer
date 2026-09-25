@@ -1,0 +1,16 @@
+services:
+  mirror:
+    build:
+      context: ..
+      dockerfile: mirror/Dockerfile
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+    command: [--config, /config/config.json, --daily]
+    volumes:
+      - ./config.json:/config/config.json:ro
+      - ${XAS_DB_DIR:?Set XAS_DB_DIR}:/xas-db:ro
+      - ${PHOTO_DIR:?Set PHOTO_DIR}:/photos
+      - ${MIRROR_STATE_DIR:?Set MIRROR_STATE_DIR}:/state
+    labels:
+      com.centurylinklabs.watchtower.enable: 'false'
