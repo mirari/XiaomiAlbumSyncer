@@ -5,6 +5,8 @@ import re
 import sqlite3
 import time
 import uuid
+import random
+from email.utils import parsedate_to_datetime
 from urllib.parse import urlparse
 import requests
 
@@ -34,6 +36,20 @@ def segment(name):
 
 
 class Xiaomi:
+    @staticmethod
+    def _backoff(attempt, retry_after=None):
+        delay = min(60, 2 ** (attempt + 1)) + random.uniform(0, 1)
+        if retry_after:
+            try:
+                seconds = float(retry_after)
+            except (ValueError, TypeError):
+                try:
+                    seconds = parsedate_to_datetime(retry_after).timestamp() - time.time()
+                except (ValueError, TypeError, OverflowError):
+                    seconds = 0
+            delay = max(delay, min(300, max(0, seconds)))
+        time.sleep(delay)
+
     def __init__(self, database, account_id, include_audio=False, album_ids=None, include_images=True, include_videos=True):
         self.database = database
         self.account_id = account_id
@@ -54,14 +70,26 @@ class Xiaomi:
         if cookie and host not in ('i.mi.com','account.xiaomi.com'):
             raise CloudError('Authentication host mismatch')
         method = kwargs.pop('method', 'GET')
-        try:
-            response = self.session.request(method, url, headers={'Cookie': cookie or ''}, timeout=(20,120), allow_redirects=False, **kwargs)
-        except requests.RequestException:
-            raise CloudError('Cloud request failed; credentials and URLs omitted') from None
-        if not 200 <= response.status_code < 400:
+        stage = 'cloud API' if cookie else 'download storage'
+        for attempt in range(5):
+            try:
+                response = self.session.request(method, url, headers={'Cookie': cookie or ''}, timeout=(20,120), allow_redirects=False, **kwargs)
+            except (requests.Timeout, requests.ConnectionError) as error:
+                if attempt == 4:
+                    raise CloudError(f'{stage}: {type(error).__name__} after 5 attempts; credentials and URLs omitted') from None
+                self._backoff(attempt)
+                continue
+            except requests.RequestException as error:
+                raise CloudError(f'{stage}: {type(error).__name__}; credentials and URLs omitted') from None
+            if 200 <= response.status_code < 400:
+                return response
+            status = response.status_code
+            retry_after = response.headers.get('Retry-After')
             response.close()
-            raise CloudError(f'Cloud HTTP {response.status_code}')
-        return response
+            if status in (408, 429, 500, 502, 503, 504) and attempt < 4:
+                self._backoff(attempt, retry_after)
+                continue
+            raise CloudError(f'{stage}: HTTP {status} after {attempt + 1} attempts')
 
     def _authenticate(self):
         with sqlite3.connect('file:'+self.database+'?mode=ro', uri=True) as db:
@@ -163,6 +191,18 @@ class Xiaomi:
         return entries
 
     def download(self, key, path):
+        for attempt in range(3):
+            try:
+                return self._download_once(key, path)
+            except (requests.Timeout, requests.ConnectionError, requests.exceptions.ChunkedEncodingError) as error:
+                # Reacquire signed URLs and overwrite only this partial stage.
+                if attempt == 2:
+                    raise CloudError(f'download stream: {type(error).__name__} after 3 attempts; credentials and URLs omitted') from None
+                self._backoff(attempt)
+            except requests.RequestException as error:
+                raise CloudError(f'download stream: {type(error).__name__}; credentials and URLs omitted') from None
+
+    def _download_once(self, key, path):
         kind, asset_id = self.assets[key]
         endpoint = 'gallery/storage' if kind == 'photo' else f'sfs/ns/recorder/file/{asset_id}/cb/dl_sfs_cb_{int(time.time()*1000)}_0/storage'
         data = self._json(endpoint, {'id':asset_id,'ts':int(time.time()*1000)})
