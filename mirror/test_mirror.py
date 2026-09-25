@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 import worker
-from engine import Mirror
+from engine import Mirror, ProgressWriter, digest, fingerprint, save_json
 from xiaomi import Xiaomi, CloudError, segment, recording_name
 
 
@@ -162,6 +162,88 @@ class EngineTests(unittest.TestCase):
         self.baseline()
         self.cloud.identity = 'second'
         with self.assertRaises(ValueError): self.mirror.run(True,now=20)
+
+    def test_unchanged_run_does_not_read_contents(self):
+        self.baseline()
+        with patch('engine.digest', side_effect=AssertionError('No whole-file reads expected')):
+            report = self.mirror.run(True, now=2)
+        self.assertEqual(report['transfer']['unchanged'], 1)
+
+    def test_explicit_bootstrap_trusts_size_once(self):
+        (self.root/'相机').mkdir(parents=True)
+        (self.root/'相机/a.jpg').write_bytes(b'sameSize')
+        mirror = Mirror(self.root, self.state, self.cloud, bootstrap_existing=True)
+        with patch('engine.digest', side_effect=AssertionError('Bootstrap must not read existing content')):
+            report = mirror.run(True, now=1)
+        self.assertEqual(report['transfer']['adopted'], 1)
+        self.assertEqual(self.cloud.calls, 1)
+        (self.root/'相机/a.jpg').write_bytes(b'changed!')
+        with self.assertRaises(ValueError): mirror.run(True, now=2)
+
+    def test_verified_staging_survives_failure_and_resumes_without_download_or_hash(self):
+        self.cloud.unstable = True
+        # Fail publishing after downloads were validated, leaving a durable receipt.
+        with patch('engine.os.replace', wraps=__import__('os').replace) as replace:
+            original = replace._mock_wraps
+            def fail_publish(src, dst):
+                if str(dst).endswith('a.jpg'): raise OSError('temporary publish failure')
+                return original(src, dst)
+            replace.side_effect = fail_publish
+            with self.assertRaises(OSError): self.baseline()
+        self.cloud.unstable = False
+        self.cloud.download = Mock(side_effect=AssertionError('Must reuse staged download'))
+        with patch('engine.digest', side_effect=AssertionError('Receipt must skip rehash')):
+            report = self.mirror.run(True, now=2)
+        self.assertEqual(report['transfer']['resumed'], 1)
+        self.assertEqual((self.root/'相机/a.jpg').read_bytes(), b'original')
+
+    def test_legacy_stage_recovers_by_hash(self):
+        stage = self.state/'staging/old/random.part'
+        stage.parent.mkdir(parents=True)
+        stage.write_bytes(b'original')
+        self.cloud.download = Mock(side_effect=AssertionError('Must recover legacy download'))
+        self.assertEqual(self.mirror.run(True, now=1)['transfer']['resumed'], 1)
+
+    def test_modified_staging_receipt_is_not_trusted(self):
+        stage = self.state/'staging/old/random.part'
+        stage.parent.mkdir(parents=True)
+        stage.write_bytes(b'original')
+        save_json(stage.with_suffix('.json'), {'sha1': digest(stage), 'fingerprint': fingerprint(stage)})
+        stage.write_bytes(b'corrupt!')
+        report = self.mirror.run(True, now=1)
+        self.assertEqual(report['transfer']['resumed'], 0)
+        self.assertEqual(report['transfer']['downloaded'], 1)
+        self.assertEqual((self.root/'相机/a.jpg').read_bytes(), b'original')
+
+    def test_move_reuses_local_content_without_network(self):
+        self.baseline()
+        self.cloud.entries = {'new': item('旅行/a.jpg')}
+        self.cloud.download = Mock(side_effect=AssertionError('Move must not download'))
+        self.assertEqual(self.mirror.run(True, now=2)['transfer']['reused'], 1)
+
+    def test_unchanged_file_modified_during_other_download_blocks_commit(self):
+        self.baseline()
+        baseline = (self.state/'manifest.json').read_bytes()
+        self.cloud.entries['2'] = item('旅行/b.jpg', b'new-file')
+        def download(key, path):
+            path.write_bytes(b'new-file')
+            (self.root/'相机/a.jpg').write_bytes(b'localmod')
+        self.cloud.download = download
+        with self.assertRaises(ValueError): self.mirror.run(True, now=2)
+        self.assertEqual((self.state/'manifest.json').read_bytes(), baseline)
+
+    def test_progress_throttles_and_does_not_fsync(self):
+        clock = Mock(return_value=0)
+        progress = ProgressWriter(self.state/'progress.json', clock=clock)
+        with patch('engine.os.fsync', side_effect=AssertionError('UI progress must not fsync')):
+            with patch('engine.save_json', wraps=save_json) as save:
+                for i in range(100): progress(phase='checking', completed=i, total=200)
+                self.assertEqual(save.call_count, 1)
+                clock.return_value = 2
+                progress(phase='checking', completed=100, total=200)
+                progress(phase='publishing', completed=0, total=200)
+                progress(phase='publishing', completed=200, total=200)
+                self.assertEqual(save.call_count, 4)
 
     def test_path_collision_traversal_symlink(self):
         for path in ('../escape','/escape','a\\b','a:stream','a//b','a/./b'):

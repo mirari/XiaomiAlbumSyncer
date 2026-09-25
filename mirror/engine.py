@@ -7,6 +7,9 @@ import os
 from pathlib import Path, PurePosixPath
 import time
 import uuid
+import errno
+import shutil
+import stat
 
 
 def digest(path):
@@ -14,18 +17,43 @@ def digest(path):
         return hashlib.file_digest(stream, 'sha1').hexdigest()
 
 
-def save_json(path, data):
+def save_json(path, data, durable=True):
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + '.tmp')
     with open(tmp, 'w', encoding='utf-8') as stream:
         json.dump(data, stream, ensure_ascii=False, indent=2)
         stream.flush()
-        os.fsync(stream.fileno())
+        if durable:
+            os.fsync(stream.fileno())
     os.replace(tmp, path)
 
 
 def read_json(path, default):
     return json.loads(path.read_text(encoding='utf-8')) if path.exists() else default
+
+
+def fingerprint(path):
+    try:
+        info = path.stat()
+    except FileNotFoundError:
+        return None
+    if not stat.S_ISREG(info.st_mode):
+        raise ValueError('Expected a regular file')
+    return {'size': info.st_size, 'mtime_ns': info.st_mtime_ns, 'ctime_ns': info.st_ctime_ns}
+
+
+class ProgressWriter:
+    """Progress is replaceable UI state, not a durable per-file transaction."""
+    def __init__(self, path, interval=2, clock=time.monotonic):
+        self.path, self.interval, self.clock = path, interval, clock
+        self.last_time, self.last_phase = float('-inf'), None
+
+    def __call__(self, **data):
+        now = self.clock()
+        if (data['phase'] != self.last_phase or now - self.last_time >= self.interval
+                or data.get('completed') == data.get('total')):
+            save_json(self.path, data, durable=False)
+            self.last_time, self.last_phase = now, data['phase']
 
 
 def safe_path(root, relative):
@@ -57,7 +85,7 @@ def validate(entries, root):
 
 
 class Mirror:
-    def __init__(self, root, state, provider, confirmations=2, min_delete_age=21600, progress=None):
+    def __init__(self, root, state, provider, confirmations=2, min_delete_age=21600, progress=None, bootstrap_existing=False):
         self.root = Path(root).resolve()
         self.state = Path(state).resolve()
         if self.state.is_relative_to(self.root) or self.root.is_relative_to(self.state):
@@ -66,6 +94,7 @@ class Mirror:
         self.confirmations = max(2, confirmations)
         self.min_delete_age = max(0, min_delete_age)
         self.progress = progress or (lambda **kwargs: None)
+        self.bootstrap_existing = bootstrap_existing
 
     def run(self, apply=False, now=None):
         self.state.mkdir(parents=True, exist_ok=True)
@@ -78,6 +107,7 @@ class Mirror:
     def _run(self, apply, now):
         previous = read_json(self.state / 'manifest.json', {'items': {}, 'missing': {}})
         old = previous['items']
+        bootstrap = self.bootstrap_existing and not (self.state / 'manifest.json').exists()
         if previous.get('root', str(self.root)) != str(self.root):
             raise ValueError('Photo root changed; a new state directory is required')
         # Provider must return only after ALL pages and stability checks succeed.
@@ -118,52 +148,125 @@ class Mirror:
             return report
         self.root.mkdir(parents=True, exist_ok=True)
         staged = []
+        observed = {}
+        local = previous.get('local', {})
+        counters = {'adopted': 0, 'unchanged': 0, 'downloaded': 0, 'resumed': 0, 'reused': 0, 'downloaded_bytes': 0}
+        report['transfer'] = counters
         old_paths = {v['path']: v for v in old.values()}
         try:
+            # Verified receipts survive cancellation. Legacy random .part names can
+            # be recovered by hashing once, or by an operator-verified import index.
+            cache = {}
+            receipts = read_json(self.state / 'resume-index.json', {})
+            wanted_sizes = {i.get('size') for i in current.values()}
+            candidates = list((self.state / 'staging').rglob('*.part'))
+            for index, candidate in enumerate(candidates):
+                self.progress(phase='recovering_downloads', completed=index, total=len(candidates))
+                relative = candidate.relative_to(self.state).as_posix()
+                safe_path(self.state, relative)
+                stamp = fingerprint(candidate)
+                if stamp['size'] not in wanted_sizes:
+                    continue
+                receipt = read_json(candidate.with_suffix('.json'), receipts.get(relative, {}))
+                before = stamp
+                sha = receipt.get('sha1') if receipt.get('fingerprint') == stamp else digest(candidate)
+                if fingerprint(candidate) != before:
+                    raise ValueError('Staged file changed during verification')
+                cache.setdefault(sha, []).append((candidate, stamp))
+                if receipt.get('fingerprint') != stamp:
+                    save_json(candidate.with_suffix('.json'), {'sha1': sha, 'fingerprint': stamp})
             # Download and verify ALL replacements before changing any managed file.
             for index, (key, item) in enumerate(current.items()):
-                self.progress(phase='verifying_and_downloading', completed=index, total=len(current))
+                self.progress(phase='checking_files', completed=index, total=len(current), **counters)
                 target = safe_path(self.root, item['path'])
-                if target.exists() and digest(target) == item['sha1']:
-                    continue
-                if target.exists():
+                stamp = fingerprint(target)
+                if stamp:
+                    cached = local.get(item['path'], {})
+                    known = cached.get('sha1') if cached.get('fingerprint') == stamp else None
+                    if bootstrap and item.get('size', 0) > 0 and stamp['size'] == item['size']:
+                        observed[item['path']] = {'sha1': item['sha1'], 'fingerprint': stamp}
+                        counters['adopted'] += 1
+                        continue
+                    if known is None:
+                        known = digest(target)
+                        if fingerprint(target) != stamp:
+                            raise ValueError('Local file changed during verification')
+                    if known == item['sha1']:
+                        observed[item['path']] = {'sha1': item['sha1'], 'fingerprint': stamp}
+                        counters['unchanged'] += 1
+                        continue
                     prior = old_paths.get(item['path'])
-                    if not prior or digest(target) != prior['sha1']:
+                    if not prior or known != prior['sha1']:
                         raise ValueError('Unmanaged or locally modified destination; manual review required')
-                expected = digest(target) if target.exists() else None
+                expected = stamp
+                cached_stages = cache.get(item['sha1'], [])
+                stage = None
+                while cached_stages:
+                    candidate, verified_stamp = cached_stages.pop()
+                    if fingerprint(candidate) == verified_stamp and (not item.get('size') or verified_stamp['size'] == item['size']):
+                        stage = candidate
+                        counters['resumed'] += 1
+                        break
+                if stage is not None:
+                    staged.append((stage, target, item, expected, fingerprint(stage)))
+                    continue
                 stage = self.state / 'staging' / run_id / (uuid.uuid4().hex + '.part')
                 stage.parent.mkdir(parents=True, exist_ok=True)
-                self.provider.download(key, stage)
+                reuse = None
+                for _, prior in old_by_hash.get(item['sha1'], []):
+                    candidate = safe_path(self.root, prior['path'])
+                    if candidate.is_file() and digest(candidate) == item['sha1']:
+                        reuse = candidate
+                        break
+                if reuse:
+                    shutil.copyfile(reuse, stage)
+                    counters['reused'] += 1
+                else:
+                    self.progress(phase='downloading', completed=index, total=len(current), **counters)
+                    self.provider.download(key, stage)
+                    counters['downloaded'] += 1
+                    counters['downloaded_bytes'] += stage.stat().st_size
                 if not stage.is_file() or digest(stage) != item['sha1']:
                     raise ValueError('Downloaded file hash mismatch')
                 if item.get('size', 0) > 0 and stage.stat().st_size != item['size']:
                     raise ValueError('Downloaded file size mismatch')
-                staged.append((stage, target, item, expected))
-            for stage, target, item, expected in staged:
+                stamp = fingerprint(stage)
+                save_json(stage.with_suffix('.json'), {'sha1': item['sha1'], 'fingerprint': stamp})
+                staged.append((stage, target, item, expected, stamp))
+            for index, (stage, target, item, expected, stage_stamp) in enumerate(staged):
+                self.progress(phase='publishing', completed=index, total=len(staged), **counters)
                 safe_path(self.root, item['path'])
-                if (digest(target) if target.exists() else None) != expected:
+                if fingerprint(target) != expected or fingerprint(stage) != stage_stamp:
                     raise ValueError('Destination changed during download; replacement refused')
                 target.parent.mkdir(parents=True, exist_ok=True)
                 if target.exists():
                     self._quarantine(target, item['path'], run_id, report, remove=False)
                 # Stage final replacement on same filesystem for atomic publish.
-                import shutil
                 temp = target.with_name('.' + target.name + '.' + uuid.uuid4().hex + '.tmp')
                 try:
-                    shutil.copyfile(stage, temp)
-                    if digest(temp) != item['sha1']:
-                        raise ValueError('Copy verification failed')
-                    os.replace(temp, target)
+                    try:
+                        os.replace(stage, target)
+                    except OSError as error:
+                        if error.errno != errno.EXDEV:
+                            raise
+                        shutil.copyfile(stage, temp)
+                        if digest(temp) != item['sha1']:
+                            raise ValueError('Copy verification failed')
+                        os.replace(temp, target)
+                        stage.unlink()
                 finally:
                     temp.unlink(missing_ok=True)
-                    stage.unlink(missing_ok=True)
+                stage.with_suffix('.json').unlink(missing_ok=True)
+                observed[item['path']] = {'sha1': item['sha1'], 'fingerprint': fingerprint(target)}
             # A second cloud read must match before cleaning ANY obsolete path.
-            self.progress(phase='rechecking_cloud', completed=len(current), total=len(current))
-            if self.provider.snapshot() != current:
-                raise ValueError('Cloud changed during download; cleanup deferred')
-            for item in current.values():
-                if digest(safe_path(self.root, item['path'])) != item['sha1']:
-                    raise ValueError('Final verification failed; cleanup deferred')
+            if not bootstrap:
+                self.progress(phase='rechecking_cloud', completed=0, total=1)
+                if self.provider.snapshot() != current:
+                    raise ValueError('Cloud changed during download; cleanup deferred')
+            for index, item in enumerate(current.values()):
+                self.progress(phase='checking_metadata', completed=index, total=len(current), **counters)
+                if fingerprint(safe_path(self.root, item['path'])) != observed[item['path']]['fingerprint']:
+                    raise ValueError('Local file changed during sync; cleanup deferred')
             self.progress(phase='reconciling', completed=len(current), total=len(current))
             active_paths = {v['path'] for v in current.values()}
             missing = {}
@@ -187,7 +290,7 @@ class Mirror:
                     if digest(target) != item['sha1']:
                         raise ValueError('Locally modified obsolete file; cleanup refused')
                     self._quarantine(target, item['path'], run_id, report)
-            save_json(self.state / 'manifest.json', {'root': str(self.root), 'source': source, 'items': retained, 'missing': missing})
+            save_json(self.state / 'manifest.json', {'root': str(self.root), 'source': source, 'items': retained, 'missing': missing, 'local': observed})
             report['status'] = 'completed'
         except Exception:
             report['status'] = 'failed; cleanup/baseline not committed'
