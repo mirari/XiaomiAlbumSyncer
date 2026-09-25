@@ -85,13 +85,12 @@ def validate(entries, root):
 
 
 class Mirror:
-    def __init__(self, root, state, provider, confirmations=2, progress=None, bootstrap_existing=False):
+    def __init__(self, root, state, provider, progress=None, bootstrap_existing=False):
         self.root = Path(root).resolve()
         self.state = Path(state).resolve()
         if self.state.is_relative_to(self.root) or self.root.is_relative_to(self.state):
             raise ValueError('State and photo roots must be separate')
         self.provider = provider
-        self.confirmations = max(2, confirmations)
         self.progress = progress or (lambda **kwargs: None)
         self.bootstrap_existing = bootstrap_existing
 
@@ -257,39 +256,24 @@ class Mirror:
                     temp.unlink(missing_ok=True)
                 stage.with_suffix('.json').unlink(missing_ok=True)
                 observed[item['path']] = {'sha1': item['sha1'], 'fingerprint': fingerprint(target)}
-            # A second cloud read must match before cleaning ANY obsolete path.
-            if not bootstrap:
-                self.progress(phase='rechecking_cloud', completed=0, total=1)
-                if self.provider.snapshot() != current:
-                    raise ValueError('Cloud changed during download; cleanup deferred')
+            # Reconcile this complete snapshot; later cloud changes belong to the next run.
             for index, item in enumerate(current.values()):
                 self.progress(phase='checking_metadata', completed=index, total=len(current), **counters)
                 if fingerprint(safe_path(self.root, item['path'])) != observed[item['path']]['fingerprint']:
                     raise ValueError('Local file changed during sync; cleanup deferred')
             self.progress(phase='reconciling', completed=len(current), total=len(current))
             active_paths = {v['path'] for v in current.values()}
-            missing = {}
-            retained = dict(current)
             for key, item in old.items():
                 if key in current and item['path'] == current[key]['path']:
                     continue
                 if item['path'] in active_paths:
-                    continue
-                prior = previous['missing'].get(key, {'count': 0, 'since': now})
-                observation = {'count': prior['count'] + 1, 'since': prior['since']}
-                if observation['count'] < self.confirmations:
-                    missing[key] = observation
-                    # Keep obsolete paths under a unique tombstone key even after same-ID moves.
-                    tombstone = key if key not in current else 'obsolete:' + item['path']
-                    retained[tombstone] = item
-                    missing[tombstone] = observation
                     continue
                 target = safe_path(self.root, item['path'])
                 if target.exists():
                     if digest(target) != item['sha1']:
                         raise ValueError('Locally modified obsolete file; cleanup refused')
                     self._quarantine(target, item['path'], run_id, report)
-            save_json(self.state / 'manifest.json', {'root': str(self.root), 'source': source, 'items': retained, 'missing': missing, 'local': observed})
+            save_json(self.state / 'manifest.json', {'root': str(self.root), 'source': source, 'items': current, 'missing': {}, 'local': observed})
             report['status'] = 'completed'
         except Exception:
             report['status'] = 'failed; cleanup/baseline not committed'

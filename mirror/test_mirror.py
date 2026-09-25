@@ -67,41 +67,36 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(old,(self.state/'manifest.json').read_bytes())
         self.assertTrue((self.root/'相机/a.jpg').is_file())
 
-    def test_delete_needs_two_complete_runs_without_time_delay_and_quarantines(self):
+    def test_delete_in_one_complete_run_and_quarantines(self):
         self.baseline()
         self.cloud.entries = {}
-        self.mirror.run(True,now=2)
-        self.assertTrue((self.root/'相机/a.jpg').exists())
-        report = self.mirror.run(True,now=2)
-        self.assertEqual(report['quarantined'],['相机/a.jpg'])
+        self.cloud.calls = 0
+        report = self.mirror.run(True, now=2)
+        self.assertEqual(self.cloud.calls, 1)
+        self.assertEqual(report['quarantined'], ['相机/a.jpg'])
         self.assertFalse((self.root/'相机/a.jpg').exists())
-        self.assertEqual(list((self.state/'quarantine').rglob('a.jpg'))[0].read_bytes(),b'original')
+        self.assertEqual(list((self.state/'quarantine').rglob('a.jpg'))[0].read_bytes(), b'original')
 
-    def test_reappearance_resets_delete_confirmation(self):
+    def test_legacy_pending_delete_is_reconciled(self):
         self.baseline()
-        original = copy.deepcopy(self.cloud.entries)
+        manifest = self.state/'manifest.json'
+        data = json.loads(manifest.read_text())
+        data['missing'] = {'1': {'count': 1, 'since': 1}}
+        save_json(manifest, data)
         self.cloud.entries = {}
         self.mirror.run(True, now=2)
-        self.cloud.entries = original
-        self.mirror.run(True, now=3)
-        self.cloud.entries = {}
-        self.mirror.run(True, now=4)
-        self.assertTrue((self.root/'相机/a.jpg').exists())
-        self.mirror.run(True, now=4)
+        data = json.loads(manifest.read_text())
+        self.assertEqual(data['missing'], {})
+        self.assertEqual(data['items'], {})
         self.assertFalse((self.root/'相机/a.jpg').exists())
 
-    def test_failed_run_does_not_advance_delete_confirmation(self):
+    def test_failed_download_does_not_clean_obsolete_files(self):
         self.baseline()
-        self.cloud.entries = {}
         old = (self.state/'manifest.json').read_bytes()
-        self.cloud.unstable = True
-        self.cloud.entries = {'new':item('相机/b.jpg')}
-        self.cloud.calls = 0
+        self.cloud.entries = {'new': item('相机/b.jpg', b'new')}
+        self.cloud.body = b'corrupt'
         with self.assertRaises(ValueError): self.mirror.run(True, now=2)
         self.assertEqual(old, (self.state/'manifest.json').read_bytes())
-        self.cloud.unstable = False
-        self.cloud.entries = {}
-        self.mirror.run(True, now=3)
         self.assertTrue((self.root/'相机/a.jpg').exists())
 
     def test_bad_replacement_keeps_old(self):
@@ -125,15 +120,12 @@ class EngineTests(unittest.TestCase):
         report = self.mirror.run(True,now=2)
         self.assertTrue(report['moved'])
         self.assertTrue((self.root/'旅行/a.jpg').exists())
-        self.assertTrue((self.root/'相机/a.jpg').exists())
-        self.mirror.run(True,now=20)
         self.assertFalse((self.root/'相机/a.jpg').exists())
 
-    def test_same_id_move_retains_tombstone(self):
+    def test_same_id_move_cleans_old_path_in_same_run(self):
         self.baseline()
         self.cloud.entries = {'1':item('旅行/a.jpg')}
         self.mirror.run(True,now=2)
-        self.mirror.run(True,now=20)
         self.assertFalse((self.root/'相机/a.jpg').exists())
         self.assertTrue((self.root/'旅行/a.jpg').exists())
 
@@ -157,15 +149,20 @@ class EngineTests(unittest.TestCase):
         with self.assertRaises(ValueError): self.mirror.run(True,now=2)
         self.assertEqual((self.root/'相机/a.jpg').read_bytes(),b'local-edit')
 
-    def test_cloud_changes_during_download_no_cleanup(self):
+    def test_cloud_changes_after_snapshot_are_seen_next_run(self):
         self.baseline()
-        self.cloud.entries = {}
-        self.mirror.run(True,now=2)
-        self.cloud.entries = {'new':item('旅行/b.jpg')}
-        self.cloud.unstable = True
+        self.cloud.entries = {'new': item('旅行/b.jpg', b'new')}
+        def download(key, path):
+            path.write_bytes(b'new')
+            self.cloud.entries['later'] = item('旅行/c.jpg', b'new')
+        self.cloud.download = download
         self.cloud.calls = 0
-        with self.assertRaises(ValueError): self.mirror.run(True,now=20)
-        self.assertTrue((self.root/'相机/a.jpg').exists())
+        self.mirror.run(True, now=2)
+        self.assertEqual(self.cloud.calls, 1)
+        self.assertFalse((self.root/'相机/a.jpg').exists())
+        self.assertFalse((self.root/'旅行/c.jpg').exists())
+        self.mirror.run(True, now=3)
+        self.assertTrue((self.root/'旅行/c.jpg').exists())
 
     def test_local_edit_during_download_is_not_overwritten(self):
         self.baseline()
