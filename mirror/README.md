@@ -102,3 +102,9 @@ python -m unittest discover -s mirror -v
 docker build -f mirror/Dockerfile -t xas-mirror:test .
 docker run --rm xas-mirror:test --help
 ```
+
+### Separate staging storage
+
+Managed deployments can set `MIRROR_STAGING_BASE` to an absolute directory. Each task uses its own numeric subdirectory; manifests, reports, and quarantine remain under the existing state path. Standalone worker configuration may supply `staging_root` explicitly. Defaults remain unchanged. Staging must not overlap the photo root.
+
+For fast same-filesystem publication, mount the shared parent of staging and photos once and use paths beneath that mount for both. Separate Docker bind mounts can cause `EXDEV` even when backed by the same Windows drive. Verify `os.replace` with a disposable file. Changing a photo root's container alias requires updating the task target, scope, manifest root and any bootstrap root consistently; it does not require moving the physical photos.

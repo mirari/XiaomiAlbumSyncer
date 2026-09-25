@@ -19,8 +19,16 @@ def execute(cfg):
     trust_existing = (bootstrap.get('mode') == 'path_and_size'
                       and bootstrap.get('root') == cfg['root']
                       and bootstrap.get('account_id') == cfg['account_id'])
+    staging = cfg.get('staging_root')
+    staging_base = os.environ.get('MIRROR_STAGING_BASE')
+    if staging is None and staging_base:
+        task_id = state.parent.name
+        if not task_id.isdecimal() or int(task_id) <= 0:
+            raise CloudError('External staging requires a numeric managed task directory')
+        staging = str(Path(staging_base) / task_id)
     mirror = Mirror(cfg['root'], state, cloud, progress=ProgressWriter(run / 'progress.json'),
-                    bootstrap_existing=trust_existing, verify_local=cfg.get('verify_local', False))
+                    bootstrap_existing=trust_existing, verify_local=cfg.get('verify_local', False),
+                    staging_root=staging)
     # Bind scope before any apply writes, including interrupted first executions.
     if cfg.get('apply'):
         save_json(state / 'scope.json', scope)

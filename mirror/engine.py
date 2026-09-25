@@ -91,9 +91,12 @@ def validate(entries, root):
 
 
 class Mirror:
-    def __init__(self, root, state, provider, progress=None, bootstrap_existing=False, verify_local=False):
+    def __init__(self, root, state, provider, progress=None, bootstrap_existing=False, verify_local=False, staging_root=None):
         self.root = Path(root).resolve()
         self.state = Path(state).resolve()
+        self.staging = Path(staging_root).resolve() if staging_root is not None else self.state / 'staging'
+        if self.staging.is_relative_to(self.root) or self.root.is_relative_to(self.staging):
+            raise ValueError('Staging and photo directories must be separate')
         if self.state.is_relative_to(self.root) or self.root.is_relative_to(self.state):
             raise ValueError('State and photo roots must be separate')
         self.provider = provider
@@ -165,11 +168,12 @@ class Mirror:
             cache = {}
             receipts = read_json(self.state / 'resume-index.json', {})
             wanted_sizes = {i.get('size') for i in current.values()}
-            candidates = list((self.state / 'staging').rglob('*.part'))
+            candidates = list(self.staging.rglob('*.part'))
             for index, candidate in enumerate(candidates):
                 self.progress(phase='recovering_downloads', completed=index, total=len(candidates))
-                relative = candidate.relative_to(self.state).as_posix()
-                safe_path(self.state, relative)
+                stage_relative = candidate.relative_to(self.staging).as_posix()
+                relative = 'staging/' + stage_relative
+                safe_path(self.staging, stage_relative)
                 stamp = fingerprint(candidate)
                 if stamp['size'] not in wanted_sizes:
                     continue
@@ -226,7 +230,7 @@ class Mirror:
                 if stage is not None:
                     staged.append((stage, target, item, expected, fingerprint(stage)))
                     continue
-                stage = safe_path(self.state / 'staging' / run_id, item['path'] + '.part')
+                stage = safe_path(self.staging / run_id, item['path'] + '.part')
                 stage.parent.mkdir(parents=True, exist_ok=True)
                 reuse = None
                 for _, prior in old_by_hash.get(item['sha1'], []):

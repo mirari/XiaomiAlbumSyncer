@@ -48,6 +48,27 @@ class EngineTests(unittest.TestCase):
     def baseline(self):
         self.mirror.run(True,now=1)
 
+    def test_external_staging_resumes_verified_file(self):
+        external = Path(self.temp.name)/'external-staging/7'
+        self.mirror = Mirror(self.root, self.state, self.cloud, staging_root=external)
+        def interrupted(source, target):
+            if str(source).endswith('.part'):
+                raise OSError('Interrupted before publication')
+            return os.rename(source, target)
+        with patch('engine.os.replace', side_effect=interrupted):
+            with self.assertRaises(OSError): self.baseline()
+        self.assertEqual(len(list(external.rglob('*.part'))), 1)
+        self.assertFalse((self.state/'staging').exists())
+        self.cloud.download = Mock(side_effect=AssertionError('No redownload'))
+        with patch('engine.digest', side_effect=AssertionError('Receipt must avoid rehash')):
+            result = self.mirror.run(True, now=2)
+        self.assertEqual(result['transfer']['resumed'], 1)
+        self.assertEqual((self.root/'相机/a.jpg').read_bytes(), b'original')
+
+    def test_external_staging_cannot_overlap_photos(self):
+        with self.assertRaises(ValueError):
+            Mirror(self.root, self.state, self.cloud, staging_root=self.root/'staging')
+
     def cross_volume_replace(self, source, target):
         if str(source).endswith('.part'):
             raise OSError(errno.EXDEV, 'cross-device')
@@ -437,6 +458,18 @@ class WorkerTests(unittest.TestCase):
                 cfg['album_ids'] = ['changed']
                 with self.assertRaises(CloudError): worker.execute(cfg)
                 self.assertEqual((base/'photos/相机/a.jpg').read_bytes(), b'original')
+
+
+class StagingConfigTests(unittest.TestCase):
+    def test_managed_staging_is_partitioned_by_task(self):
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder)
+            cfg = {'state':str(base/'state/7/data'), 'run_dir':str(base/'runs/run'),
+                   'root':str(base/'photos'), 'account_id':9, 'database':'unused', 'apply':False}
+            with patch.dict(os.environ, {'MIRROR_STAGING_BASE':str(base/'staging')}), patch('worker.Xiaomi'), patch('worker.Mirror') as mirror:
+                mirror.return_value.run.return_value = {'status':'reported'}
+                worker.execute(cfg)
+            self.assertEqual(mirror.call_args.kwargs['staging_root'], str(base/'staging/7'))
 
 
 if __name__ == '__main__':
