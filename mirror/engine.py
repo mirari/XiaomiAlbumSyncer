@@ -30,7 +30,7 @@ def read_json(path, default):
 
 def safe_path(root, relative):
     p = PurePosixPath(relative)
-    if p.is_absolute() or not p.parts or any(x in ('', '.', '..') for x in p.parts) or '\\' in relative:
+    if str(p) != relative or p.is_absolute() or not p.parts or any(x in ('', '.', '..') for x in p.parts) or '\\' in relative:
         raise ValueError('Unsafe relative path')
     current = root
     for part in p.parts:
@@ -39,8 +39,8 @@ def safe_path(root, relative):
         current = current / part
         if current.is_symlink():
             raise ValueError('Symlink in managed path')
-    if not current.resolve().is_relative_to(root.resolve()):
-        raise ValueError('Path escapes root')
+    # A canonical relative path with no '..' or symlink components stays inside
+    # root. Avoid repeated resolve/stat walks across Windows-mounted filesystems.
     return current
 
 

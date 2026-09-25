@@ -35,7 +35,7 @@ class Xiaomi:
 
     def _request(self, url, cookie=None, **kwargs):
         host = urlparse(url).hostname or ''
-        if urlparse(url).scheme != 'https' or not any(host == d or host.endswith('.'+d) for d in ('mi.com','xiaomi.com','ksyuncs.com','aliyuncs.com','volces.com')):
+        if urlparse(url).scheme != 'https' or not any(host == d or host.endswith('.'+d) for d in ('mi.com','xiaomi.com','xiaomi.net','ksyuncs.com','aliyuncs.com','volces.com')):
             raise CloudError('Unexpected cloud endpoint; request refused')
         if cookie and host not in ('i.mi.com','account.xiaomi.com'):
             raise CloudError('Authentication host mismatch')

@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import Mock
 from engine import Mirror
 from xiaomi import Xiaomi, CloudError, segment
 
@@ -162,7 +163,7 @@ class EngineTests(unittest.TestCase):
         with self.assertRaises(ValueError): self.mirror.run(True,now=20)
 
     def test_path_collision_traversal_symlink(self):
-        for path in ('../escape','/escape','a\\b','a:stream'):
+        for path in ('../escape','/escape','a\\b','a:stream','a//b','a/./b'):
             self.cloud.entries = {'1':item(path)}
             with self.assertRaises(ValueError): self.mirror.run(True,now=1)
         self.cloud.entries = {'1':item('A.jpg'),'2':item('a.jpg')}
@@ -174,6 +175,16 @@ class EngineTests(unittest.TestCase):
 
 
 class AdapterTests(unittest.TestCase):
+    def test_download_hosts_do_not_receive_account_cookies(self):
+        cloud = Xiaomi('/unused',1)
+        cloud.session.request = Mock(return_value=Mock(status_code=200))
+        cloud._request('https://c3.xmssmc.mws.xiaomi.net/object')
+        self.assertEqual(cloud.session.request.call_args.kwargs['headers']['Cookie'], '')
+        for url in ('https://xiaomi.net.attacker.example/object', 'http://xiaomi.net/object'):
+            with self.assertRaises(CloudError): cloud._request(url)
+        with self.assertRaises(CloudError):
+            cloud._request('https://c3.xmssmc.mws.xiaomi.net/object', cookie='private')
+
     def test_empty_album_omits_gallery_list(self):
         cloud = Xiaomi('/unused',1)
         cloud._albums = lambda: {'1':{'name':'相机','count':0,'updated':0}}
