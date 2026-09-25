@@ -144,6 +144,7 @@ class EngineTests(unittest.TestCase):
         self.assertTrue((self.root/'unknown.jpg').exists())
 
     def test_local_conflict_blocks_overwrite(self):
+        self.mirror.verify_local = True
         self.baseline()
         (self.root/'相机/a.jpg').write_bytes(b'local-edit')
         with self.assertRaises(ValueError): self.mirror.run(True,now=2)
@@ -192,10 +193,49 @@ class EngineTests(unittest.TestCase):
             report = self.mirror.run(True, now=2)
         self.assertEqual(report['transfer']['unchanged'], 1)
 
+    def test_unchanged_daily_run_never_stats_photo_paths(self):
+        self.baseline()
+        original_stat, original_lstat = Path.stat, Path.lstat
+        def guard(original):
+            def checked(path, *args, **kwargs):
+                if self.root in path.parents:
+                    self.fail('Unchanged photo path must not touch filesystem')
+                return original(path, *args, **kwargs)
+            return checked
+        with patch.object(Path, 'stat', guard(original_stat)), patch.object(Path, 'lstat', guard(original_lstat)), patch('engine.digest', side_effect=AssertionError('No photo content reads')):
+            report = self.mirror.run(True, now=2)
+        self.assertEqual(report['transfer']['trusted'], 1)
+
+    def test_daily_ignores_missing_local_file_full_check_repairs_it(self):
+        self.baseline()
+        (self.root/'相机/a.jpg').unlink()
+        self.assertEqual(self.mirror.run(True, now=2)['transfer']['trusted'], 1)
+        self.assertFalse((self.root/'相机/a.jpg').exists())
+        self.mirror.verify_local = True
+        self.assertEqual(self.mirror.run(True, now=3)['transfer']['downloaded'], 1)
+        self.assertEqual((self.root/'相机/a.jpg').read_bytes(), b'original')
+
+    def test_cloud_change_still_rejects_locally_modified_target(self):
+        self.baseline()
+        (self.root/'相机/a.jpg').write_bytes(b'local-edit')
+        self.cloud.entries['1'] = item('相机/a.jpg', b'new')
+        self.cloud.body = b'new'
+        with self.assertRaises(ValueError): self.mirror.run(True, now=2)
+        self.assertEqual((self.root/'相机/a.jpg').read_bytes(), b'local-edit')
+
+    def test_changed_path_symlink_is_rejected(self):
+        self.baseline()
+        outside = self.root.parent/'outside'
+        outside.mkdir()
+        (self.root/'linked').symlink_to(outside, target_is_directory=True)
+        self.cloud.entries['new'] = item('linked/b.jpg')
+        with self.assertRaises(ValueError): self.mirror.run(True, now=2)
+        self.assertFalse((outside/'b.jpg').exists())
+
     def test_explicit_bootstrap_trusts_size_once(self):
         (self.root/'相机').mkdir(parents=True)
         (self.root/'相机/a.jpg').write_bytes(b'sameSize')
-        mirror = Mirror(self.root, self.state, self.cloud, bootstrap_existing=True)
+        mirror = Mirror(self.root, self.state, self.cloud, bootstrap_existing=True, verify_local=True)
         with patch('engine.digest', side_effect=AssertionError('Bootstrap must not read existing content')):
             report = mirror.run(True, now=1)
         self.assertEqual(report['transfer']['adopted'], 1)
@@ -245,6 +285,7 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(self.mirror.run(True, now=2)['transfer']['reused'], 1)
 
     def test_unchanged_file_modified_during_other_download_blocks_commit(self):
+        self.mirror.verify_local = True
         self.baseline()
         baseline = (self.state/'manifest.json').read_bytes()
         self.cloud.entries['2'] = item('旅行/b.jpg', b'new-file')

@@ -56,7 +56,7 @@ class ProgressWriter:
             self.last_time, self.last_phase = now, data['phase']
 
 
-def safe_path(root, relative):
+def safe_path(root, relative, check_filesystem=True):
     p = PurePosixPath(relative)
     if str(p) != relative or p.is_absolute() or not p.parts or any(x in ('', '.', '..') for x in p.parts) or '\\' in relative:
         raise ValueError('Unsafe relative path')
@@ -65,7 +65,7 @@ def safe_path(root, relative):
         if ':' in part:
             raise ValueError('Unsafe path component')
         current = current / part
-        if current.is_symlink():
+        if check_filesystem and current.is_symlink():
             raise ValueError('Symlink in managed path')
     # A canonical relative path with no '..' or symlink components stays inside
     # root. Avoid repeated resolve/stat walks across Windows-mounted filesystems.
@@ -77,7 +77,7 @@ def validate(entries, root):
     for key, item in entries.items():
         if not key or len(item['sha1']) != 40 or any(c not in '0123456789abcdef' for c in item['sha1']):
             raise ValueError('Missing or invalid content hash')
-        safe_path(root, item['path'])
+        safe_path(root, item['path'], check_filesystem=False)
         normalized = item['path'].casefold()
         if normalized in paths:
             raise ValueError('Multiple cloud files map to one local path')
@@ -85,7 +85,7 @@ def validate(entries, root):
 
 
 class Mirror:
-    def __init__(self, root, state, provider, progress=None, bootstrap_existing=False):
+    def __init__(self, root, state, provider, progress=None, bootstrap_existing=False, verify_local=False):
         self.root = Path(root).resolve()
         self.state = Path(state).resolve()
         if self.state.is_relative_to(self.root) or self.root.is_relative_to(self.state):
@@ -93,6 +93,7 @@ class Mirror:
         self.provider = provider
         self.progress = progress or (lambda **kwargs: None)
         self.bootstrap_existing = bootstrap_existing
+        self.verify_local = verify_local
 
     def run(self, apply=False, now=None):
         self.state.mkdir(parents=True, exist_ok=True)
@@ -147,8 +148,9 @@ class Mirror:
         self.root.mkdir(parents=True, exist_ok=True)
         staged = []
         observed = {}
+        trusted = set()
         local = previous.get('local', {})
-        counters = {'adopted': 0, 'unchanged': 0, 'downloaded': 0, 'resumed': 0, 'reused': 0, 'downloaded_bytes': 0}
+        counters = {'adopted': 0, 'unchanged': 0, 'trusted': 0, 'downloaded': 0, 'resumed': 0, 'reused': 0, 'downloaded_bytes': 0}
         report['transfer'] = counters
         old_paths = {v['path']: v for v in old.values()}
         try:
@@ -176,11 +178,21 @@ class Mirror:
             # Download and verify ALL replacements before changing any managed file.
             for index, (key, item) in enumerate(current.items()):
                 self.progress(phase='checking_files', completed=index, total=len(current), **counters)
+                prior = old.get(key)
+                cached = local.get(item['path'], {})
+                if (not self.verify_local and prior
+                        and prior['path'] == item['path'] and prior['sha1'] == item['sha1']
+                        and cached.get('sha1') == item['sha1'] and cached.get('fingerprint')):
+                    observed[item['path']] = cached
+                    trusted.add(item['path'])
+                    counters['unchanged'] += 1
+                    counters['trusted'] += 1
+                    continue
                 target = safe_path(self.root, item['path'])
                 stamp = fingerprint(target)
                 if stamp:
                     cached = local.get(item['path'], {})
-                    known = cached.get('sha1') if cached.get('fingerprint') == stamp else None
+                    known = cached.get('sha1') if not self.verify_local and cached.get('fingerprint') == stamp else None
                     if bootstrap and item.get('size', 0) > 0 and stamp['size'] == item['size']:
                         observed[item['path']] = {'sha1': item['sha1'], 'fingerprint': stamp}
                         counters['adopted'] += 1
@@ -258,6 +270,8 @@ class Mirror:
                 observed[item['path']] = {'sha1': item['sha1'], 'fingerprint': fingerprint(target)}
             # Reconcile this complete snapshot; later cloud changes belong to the next run.
             for index, item in enumerate(current.values()):
+                if item['path'] in trusted:
+                    continue
                 self.progress(phase='checking_metadata', completed=index, total=len(current), **counters)
                 if fingerprint(safe_path(self.root, item['path'])) != observed[item['path']]['fingerprint']:
                     raise ValueError('Local file changed during sync; cleanup deferred')

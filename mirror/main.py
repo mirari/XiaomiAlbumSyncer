@@ -12,6 +12,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', required=True)
     parser.add_argument('--apply', action='store_true', help='Enable writes and quarantining; default is report-only')
+    parser.add_argument('--verify-local', action='store_true', help='Read and hash all local files instead of trusting unchanged cloud entries')
     parser.add_argument('--daily', action='store_true', help='Run daily at configured local time')
     args = parser.parse_args()
     os.umask(0o077)
@@ -19,7 +20,7 @@ def main():
         cfg = json.load(stream)
     def run():
         cloud = Xiaomi(cfg['database'], cfg['account_id'], cfg.get('include_audio',False))
-        engine = Mirror(cfg['root'], cfg['state'], cloud)
+        engine = Mirror(cfg['root'], cfg['state'], cloud, verify_local=args.verify_local)
         try:
             report = engine.run(args.apply)
             print(json.dumps({'status':report['status'],'cloud_count':report['cloud_count'], 'changes':{k:len(report[k]) for k in ('added','modified','moved','deleted','quarantined')}}),flush=True)

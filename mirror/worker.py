@@ -20,7 +20,7 @@ def execute(cfg):
                       and bootstrap.get('root') == cfg['root']
                       and bootstrap.get('account_id') == cfg['account_id'])
     mirror = Mirror(cfg['root'], state, cloud, progress=ProgressWriter(run / 'progress.json'),
-                    bootstrap_existing=trust_existing)
+                    bootstrap_existing=trust_existing, verify_local=cfg.get('verify_local', False))
     # Bind scope before any apply writes, including interrupted first executions.
     if cfg.get('apply'):
         save_json(state / 'scope.json', scope)
