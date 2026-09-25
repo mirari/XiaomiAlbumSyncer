@@ -3,7 +3,7 @@ import json
 import os
 from pathlib import Path
 import sys
-from engine import Mirror, save_json, read_json
+from engine import Mirror, save_json, read_json, ProgressWriter
 from xiaomi import Xiaomi, CloudError
 
 
@@ -15,7 +15,12 @@ def execute(cfg):
         raise CloudError('Task scope changed after baseline; create a new task with separate state')
     cloud = Xiaomi(cfg['database'], cfg['account_id'], cfg.get('include_audio', False),
                    cfg.get('album_ids'), cfg.get('include_images', True), cfg.get('include_videos', True))
-    mirror = Mirror(cfg['root'], state, cloud, progress=lambda **data: save_json(run / 'progress.json', data))
+    bootstrap = read_json(state / 'bootstrap.json', {})
+    trust_existing = (bootstrap.get('mode') == 'path_and_size'
+                      and bootstrap.get('root') == cfg['root']
+                      and bootstrap.get('account_id') == cfg['account_id'])
+    mirror = Mirror(cfg['root'], state, cloud, progress=ProgressWriter(run / 'progress.json'),
+                    bootstrap_existing=trust_existing)
     # Bind scope before any apply writes, including interrupted first executions.
     if cfg.get('apply'):
         save_json(state / 'scope.json', scope)
