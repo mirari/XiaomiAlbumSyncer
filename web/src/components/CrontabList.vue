@@ -48,7 +48,7 @@ const emit = defineEmits<{
     class="overflow-hidden rounded-lg border border-slate-200/80 bg-white/70 backdrop-blur-sm dark:border-slate-800/80 dark:bg-slate-900/60"
   >
     <div
-      v-if="props.loading"
+      v-if="props.loading && !props.crontabs?.length"
       class="px-4 py-8 text-center text-xs text-slate-400 dark:text-slate-500"
     >
       {{ t('common.status.loading') }}
