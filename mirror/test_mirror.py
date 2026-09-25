@@ -68,7 +68,7 @@ class EngineTests(unittest.TestCase):
         def fail_copy(source, target):
             Path(target).write_bytes(b'partial')
             raise OSError('Disk write failed')
-        with patch('engine.os.replace', side_effect=self.cross_volume_replace), patch('shutil.copyfile', side_effect=fail_copy):
+        with patch('engine.os.replace', side_effect=self.cross_volume_replace), patch('engine.copy_buffered', side_effect=fail_copy):
             with self.assertRaises(OSError):
                 self.baseline()
         self.assertFalse((self.root/'相机/a.jpg').exists())

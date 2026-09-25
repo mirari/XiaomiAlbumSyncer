@@ -17,6 +17,12 @@ def digest(path):
         return hashlib.file_digest(stream, 'sha1').hexdigest()
 
 
+def copy_buffered(source, target):
+    # sendfile is disproportionately slow across WSL Windows bind mounts.
+    with open(source, 'rb') as reader, open(target, 'wb') as writer:
+        shutil.copyfileobj(reader, writer, 1024 * 1024)
+
+
 def save_json(path, data, durable=True):
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + '.tmp')
@@ -259,7 +265,7 @@ class Mirror:
                     # The staged content is already verified. Cross-volume move
                     # copies directly to its final name without rereading the HDD.
                     try:
-                        shutil.copyfile(stage, target)
+                        copy_buffered(stage, target)
                         if target.stat().st_size != stage_stamp['size']:
                             raise ValueError('Copy size mismatch')
                     except Exception:
