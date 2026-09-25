@@ -494,7 +494,8 @@ onUnmounted(() => {
             >
           </div>
 
-          <div class="flex flex-wrap items-center gap-1.5">
+          <p v-if="crontab.config.syncMode === 'MIRROR' && crontab.config.mirrorAllAlbums" class="text-xs text-slate-500">每次执行自动读取该账号全部相册，包括未来新增相册。</p>
+          <div v-else class="flex flex-wrap items-center gap-1.5">
             <Chip
               v-for="id in crontab.albumIds"
               :key="id"

@@ -37,15 +37,20 @@ class TaskScheduler(
 
     private val log = LoggerFactory.getLogger(this.javaClass)
     private val runningCrontabs: MutableSet<Long> = Collections.synchronizedSet(mutableSetOf())
-    private val runningTargets = mutableMapOf<Long, Path>()
+    private val runningTargets = mutableMapOf<Long, Pair<Path, Boolean>>()
 
     @Synchronized
     private fun acquire(crontab: Crontab): Boolean {
         val path = Path.of(crontab.config.targetPath).toAbsolutePath().normalize()
-        val canonical = if (java.nio.file.Files.exists(path)) path.toRealPath() else path
-        if (runningTargets.values.any { it.startsWith(canonical) || canonical.startsWith(it) }) return false
+        var ancestor = path
+        while (!java.nio.file.Files.exists(ancestor) && ancestor.parent != null) ancestor = ancestor.parent
+        val canonical = ancestor.toRealPath().resolve(ancestor.relativize(path)).normalize()
+        val mirror = crontab.config.syncMode == "MIRROR"
+        if (runningTargets.values.any { (target, isMirror) ->
+            (mirror || isMirror) && (target.startsWith(canonical) || canonical.startsWith(target))
+        }) return false
         if (!runningCrontabs.add(crontab.id)) return false
-        runningTargets[crontab.id] = canonical
+        runningTargets[crontab.id] = canonical to mirror
         return true
     }
 
