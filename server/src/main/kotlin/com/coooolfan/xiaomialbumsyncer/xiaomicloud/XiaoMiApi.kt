@@ -37,7 +37,8 @@ class XiaoMiApi(private val tokenManager: TokenManager) {
         var hasMorePages = true
 
         while (hasMorePages) {
-            val responseTree = getJson(accountId, apiProperties.url("gallery/user/album/list?ts=${System.currentTimeMillis()}&pageNum=$pageNum&pageSize=10&isShared=false&numOfThumbnails=1"))
+            val responseTree = readCloudPage { getJson(accountId, apiProperties.url("gallery/user/album/list?ts=${System.currentTimeMillis()}&pageNum=$pageNum&pageSize=10&isShared=false&numOfThumbnails=1")) }
+            requireCloudPage(responseTree, "albums", paginated = true)
             val albumArrayJson = responseTree.at("/data/albums")
 
             log.info("解析第 ${pageNum + 1} 页相册数据，此页共 ${albumArrayJson.size()} 个相册")
@@ -93,7 +94,11 @@ class XiaoMiApi(private val tokenManager: TokenManager) {
                     apiProperties.url("gallery/user/galleries?ts=${System.currentTimeMillis()}&pageNum=$pageNum&pageSize=$pageSize&albumId=${album.remoteId}")
 
 
-            val responseTree = getJson(album.accountId, url + urlDayParams)
+            val responseTree = readCloudPage { getJson(album.accountId, url + urlDayParams) }
+            requireCloudPage(responseTree, if (album.isAudioAlbum()) "list" else "galleries",
+                paginated = !album.isAudioAlbum(),
+                allowEmpty = !album.isAudioAlbum() && (album.assetCount == 0L || day != null) && pageNum == 0 &&
+                    responseTree.at("/data/isLastPage").asBoolean())
             val assetArrayJson =
                 if (album.isAudioAlbum())
                     responseTree.at("/data/list")
