@@ -1,0 +1,21 @@
+name: Mirror safety tests
+on:
+  push:
+    branches: [main, 'feature/**']
+    paths: ['mirror/**', '.github/workflows/mirror-*.yml']
+  pull_request:
+    paths: ['mirror/**', '.github/workflows/mirror-*.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - run: python -m unittest discover -s mirror -v

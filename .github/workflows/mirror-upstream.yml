@@ -1,0 +1,77 @@
+name: Mirror upstream sync
+on:
+  schedule:
+    - cron: '17 18 * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: write
+concurrency:
+  group: mirror-upstream-sync
+  cancel-in-progress: false
+jobs:
+  sync:
+    if: github.repository == 'mirari/XiaomiAlbumSyncer'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Merge upstream candidate
+        id: candidate
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch https://github.com/Coooolfan/XiaomiAlbumSyncer.git main
+          if git merge-base --is-ancestor FETCH_HEAD HEAD; then
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+            git merge --no-edit FETCH_HEAD
+          fi
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Mirror regression tests
+        run: |
+          python -m unittest discover -s mirror -v
+      - uses: actions/setup-java@v5
+        if: steps.candidate.outputs.changed == 'true'
+        with:
+          java-version: '25'
+          distribution: temurin
+      - name: Compile upstream backend
+        if: steps.candidate.outputs.changed == 'true'
+        working-directory: server
+        run: bash ./gradlew clean compileKotlin test
+      - uses: actions/setup-node@v7
+        if: steps.candidate.outputs.changed == 'true'
+        with:
+          node-version: '24.20.0'
+      - name: Build upstream frontend
+        if: steps.candidate.outputs.changed == 'true'
+        working-directory: web
+        run: |
+          corepack enable
+          corepack prepare yarn@4.18.0 --activate
+          yarn install --immutable
+          yarn build
+      - name: Advance main only after validation
+        if: steps.candidate.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh auth setup-git
+          git push origin HEAD:main
+          gh workflow run full-image.yml --ref main
+          gh workflow run e2e.yml --ref main
+      - name: Report blocked update
+        if: failure()
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          echo "::error::Upstream synchronization stopped. Review merge/build logs at $RUN_URL"
+          printf '## Upstream synchronization blocked\n\nMain was not force-updated. Review [the failed steps](%s).\n' "$RUN_URL" >> "$GITHUB_STEP_SUMMARY"
