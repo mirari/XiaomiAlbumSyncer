@@ -42,4 +42,8 @@ data class CrontabConfig(
     val downloadAudios: Boolean = true,
 
     val notify: Boolean = true,
+
+    val syncMode: String = "ADD_ONLY",
+    val mirrorAllAlbums: Boolean = true,
+    val mirrorReportOnly: Boolean = true,
 )

@@ -16,6 +16,7 @@ import Message from 'primevue/message'
 import Tag from 'primevue/tag'
 import ExpressionPathHelp from '@/components/ExpressionPathHelp.vue'
 import OptionCard from '@/components/OptionCard.vue'
+import MirrorFormOptions from '@/components/MirrorFormOptions.vue'
 import CronHelp from '@/components/CronHelp.vue'
 import type { CrontabSyncMode } from '@/__generated/model/enums'
 import type { LocalCronForm } from '@/utils/crontabForm'
@@ -254,12 +255,14 @@ watch(
 
           <!-- 同步范围 -->
           <div v-else-if="step === 'scope'" key="scope" class="space-y-4 pt-2">
+            <MirrorFormOptions v-model:form="form" />
             <div class="space-y-2">
               <label class="block text-[13px] font-medium text-slate-500 dark:text-slate-400">{{
                 t('cronform.field.albums')
               }}</label>
               <MultiSelect
                 v-model="form.albumIds"
+                :disabled="form.config.syncMode === 'MIRROR' && form.config.mirrorAllAlbums"
                 :options="formAlbumOptions"
                 display="chip"
                 optionLabel="label"
@@ -311,8 +314,11 @@ watch(
 
           <!-- 同步模式 -->
           <div v-else-if="step === 'mode'" key="mode" class="flex flex-col gap-3 pt-2">
+            <p v-if="form.config.syncMode === 'MIRROR'" class="text-sm">
+              单向镜像每次读取完整云端清单，按云端状态更新本地目录。点击下一步配置保存目录和日程。
+            </p>
             <OptionCard
-              v-for="card in syncModeCards"
+              v-for="card in form.config.syncMode === 'MIRROR' ? [] : syncModeCards"
               :key="card.value"
               :icon="card.icon"
               :label="card.label"
@@ -441,11 +447,20 @@ watch(
             <div
               class="flex items-center gap-2 text-[13px] text-slate-600 dark:text-slate-300 pt-1"
             >
-              <Checkbox v-model="form.config.notify" binary />
+              <Checkbox
+                v-model="form.config.notify"
+                :disabled="form.config.syncMode === 'MIRROR'"
+                binary
+              />
               <span>{{ t('cronform.toggle.notify') }}</span>
             </div>
 
-            <Panel :header="t('cronform.advanced.title')" toggleable collapsed>
+            <Panel
+              v-if="form.config.syncMode !== 'MIRROR'"
+              :header="t('cronform.advanced.title')"
+              toggleable
+              collapsed
+            >
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div class="space-y-1">
                   <div

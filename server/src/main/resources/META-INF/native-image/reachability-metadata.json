@@ -1182,6 +1182,18 @@
             "com.coooolfan.xiaomialbumsyncer.utils.SingleStagePatch",
             "com.coooolfan.xiaomialbumsyncer.pipeline.CrontabPipeline",
             "com.coooolfan.xiaomialbumsyncer.service.NotifyService",
+            "com.coooolfan.xiaomialbumsyncer.service.MirrorService",
+            "java.util.concurrent.Executor"
+          ]
+        },
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "org.noear.solon.scheduling.scheduled.manager.IJobManager",
+            "org.babyfish.jimmer.sql.kt.KSqlClient",
+            "com.coooolfan.xiaomialbumsyncer.utils.SingleStagePatch",
+            "com.coooolfan.xiaomialbumsyncer.pipeline.CrontabPipeline",
+            "com.coooolfan.xiaomialbumsyncer.service.NotifyService",
             "java.util.concurrent.Executor"
           ]
         },
@@ -1917,6 +1929,17 @@
           "name": "revoke",
           "parameterTypes": [
             "long"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "com.coooolfan.xiaomialbumsyncer.controller.MirrorController",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.coooolfan.xiaomialbumsyncer.service.MirrorService"
           ]
         }
       ]
@@ -3796,6 +3819,58 @@
             "boolean",
             "boolean",
             "boolean",
+            "java.lang.String",
+            "boolean",
+            "boolean",
+            "boolean",
+            "int",
+            "int",
+            "int",
+            "int",
+            "int",
+            "boolean",
+            "boolean",
+            "java.lang.String",
+            "boolean",
+            "boolean"
+          ]
+        },
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.String",
+            "java.lang.String",
+            "java.lang.String",
+            "boolean",
+            "boolean",
+            "boolean",
+            "java.lang.String",
+            "boolean",
+            "boolean",
+            "boolean",
+            "int",
+            "int",
+            "int",
+            "int",
+            "int",
+            "boolean",
+            "boolean",
+            "java.lang.String",
+            "boolean",
+            "boolean",
+            "int",
+            "kotlin.jvm.internal.DefaultConstructorMarker"
+          ]
+        },
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.String",
+            "java.lang.String",
+            "java.lang.String",
+            "boolean",
+            "boolean",
+            "boolean",
             "boolean",
             "java.lang.String"
           ]
@@ -4066,6 +4141,62 @@
           ]
         },
         {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.String",
+            "java.lang.String",
+            "java.lang.String",
+            "boolean",
+            "boolean",
+            "boolean",
+            "boolean",
+            "java.lang.String",
+            "boolean",
+            "boolean",
+            "boolean",
+            "int",
+            "int",
+            "int",
+            "int",
+            "int",
+            "boolean",
+            "java.lang.String",
+            "boolean",
+            "java.lang.String",
+            "boolean",
+            "boolean"
+          ]
+        },
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.String",
+            "java.lang.String",
+            "java.lang.String",
+            "boolean",
+            "boolean",
+            "boolean",
+            "boolean",
+            "java.lang.String",
+            "boolean",
+            "boolean",
+            "boolean",
+            "int",
+            "int",
+            "int",
+            "int",
+            "int",
+            "boolean",
+            "java.lang.String",
+            "boolean",
+            "java.lang.String",
+            "boolean",
+            "boolean",
+            "int",
+            "kotlin.jvm.internal.DefaultConstructorMarker"
+          ]
+        },
+        {
           "name": "getCheckSha1",
           "parameterTypes": []
         },
@@ -4110,6 +4241,14 @@
           "parameterTypes": []
         },
         {
+          "name": "getMirrorAllAlbums",
+          "parameterTypes": []
+        },
+        {
+          "name": "getMirrorReportOnly",
+          "parameterTypes": []
+        },
+        {
           "name": "getNotify",
           "parameterTypes": []
         },
@@ -4127,6 +4266,10 @@
         },
         {
           "name": "getSkipExistingFile",
+          "parameterTypes": []
+        },
+        {
+          "name": "getSyncMode",
           "parameterTypes": []
         },
         {
@@ -7280,6 +7423,37 @@
       "type": "com.coooolfan.xiaomialbumsyncer.service.McpTokenService$Companion"
     },
     {
+      "type": "com.coooolfan.xiaomialbumsyncer.service.MirrorCloud"
+    },
+    {
+      "type": "com.coooolfan.xiaomialbumsyncer.service.MirrorFiles"
+    },
+    {
+      "type": "com.coooolfan.xiaomialbumsyncer.service.MirrorFilesKt"
+    },
+    {
+      "type": "com.coooolfan.xiaomialbumsyncer.service.MirrorFilesKt$mirrorHostPath$$inlined$sortedByDescending$1"
+    },
+    {
+      "type": "com.coooolfan.xiaomialbumsyncer.service.MirrorRun"
+    },
+    {
+      "type": "com.coooolfan.xiaomialbumsyncer.service.MirrorService",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.fasterxml.jackson.databind.ObjectMapper",
+            "com.coooolfan.xiaomialbumsyncer.xiaomicloud.XiaoMiApi",
+            "org.babyfish.jimmer.sql.kt.KSqlClient"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "com.coooolfan.xiaomialbumsyncer.service.MirrorService$list$lambda$0$$inlined$compareByDescending$1"
+    },
+    {
       "type": "com.coooolfan.xiaomialbumsyncer.service.MountPathService",
       "methods": [
         {
@@ -7925,6 +8099,12 @@
     },
     {
       "type": "com.coooolfan.xiaomialbumsyncer.xiaomicloud.AllItemsPage"
+    },
+    {
+      "type": "com.coooolfan.xiaomialbumsyncer.xiaomicloud.CloudResponseException"
+    },
+    {
+      "type": "com.coooolfan.xiaomialbumsyncer.xiaomicloud.CloudResponseKt"
     },
     {
       "type": "com.coooolfan.xiaomialbumsyncer.xiaomicloud.QrLoginManager",

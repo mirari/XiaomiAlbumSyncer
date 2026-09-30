@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import Button from 'primevue/button'
+import MirrorTaskPanel from '@/components/MirrorTaskPanel.vue'
 import Chip from 'primevue/chip'
 import Menu from 'primevue/menu'
 import Tag from 'primevue/tag'
@@ -130,6 +131,7 @@ function reloadHistoryGroups() {
 }
 
 async function loadHistoryGroups(allowRetry: boolean) {
+  if (props.crontab.config.syncMode === 'MIRROR') return
   const cached = historyPageCache.get(historyPageIndex.value)
   if (cached) {
     historyGroups.value = cached
@@ -233,6 +235,12 @@ const lastRunStatus = computed(() => {
 const enabledOptionTags = computed(() => {
   const c = props.crontab.config
   if (!c) return [] as string[]
+  if (c.syncMode === 'MIRROR')
+    return [
+      '单向镜像',
+      c.mirrorReportOnly ? '仅报告' : '实际同步',
+      c.mirrorAllAlbums ? '全部相册（含新增）' : '指定相册',
+    ]
   const tags: string[] = []
   if (c.downloadImages) tags.push(t('schedule.options.images'))
   if (c.downloadVideos) tags.push(t('schedule.options.videos'))
@@ -251,6 +259,7 @@ const moreMenu = ref<InstanceType<typeof Menu> | null>(null)
 const moreMenuOpen = ref(false)
 const moreMenuItems = computed(() => {
   const items: Array<{ label: string; icon: string; command: () => void }> = []
+  if (props.crontab.config.syncMode === 'MIRROR') return items
   if (props.crontab.config?.rewriteExifTime) {
     items.push({
       label: t('schedule.row.menu.fillExif'),
@@ -283,24 +292,42 @@ const lastFetchTime = ref(0)
 const now = ref(Date.now())
 let pollTimer: number | undefined
 let nowTimer: number | undefined
+let fetchingStats = false
+let disposed = false
 
 async function fetchStats() {
-  if (!props.crontab.id) return
+  if (!props.crontab.id || fetchingStats || disposed) return
+  fetchingStats = true
   try {
+    // Mirror executions do not populate the native download pipeline statistics.
+    if (props.crontab.config.syncMode === 'MIRROR') {
+      const tasks = await api.crontabController.listCrontabs()
+      if (disposed) return
+      const task = tasks.find((task) => String(task.id) === String(props.crontab.id))
+      if (!task?.running) {
+        stopPolling()
+        emit('refresh')
+      }
+      return
+    }
     currentStats.value = await api.crontabController.getCrontabCurrentStats({
       crontabId: props.crontab.id,
     })
+    if (disposed) return
     if (!currentStats.value.ts) {
       emit('refresh')
     }
     lastFetchTime.value = Date.now()
   } catch (e: unknown) {
+    if (disposed) return
     console.debug('Failed to fetch stats', e)
     const msg = e instanceof Error ? e.message : String(e)
     if (msg.includes('没有正在运行')) {
       stopPolling()
       emit('refresh')
     }
+  } finally {
+    fetchingStats = false
   }
 }
 
@@ -308,7 +335,10 @@ function startPolling() {
   if (polling.value) return
   polling.value = true
   fetchStats()
-  pollTimer = window.setInterval(fetchStats, 1000)
+  pollTimer = window.setInterval(
+    fetchStats,
+    props.crontab.config.syncMode === 'MIRROR' ? 5000 : 1000,
+  )
   nowTimer = window.setInterval(() => {
     now.value = Date.now()
   }, 200)
@@ -349,6 +379,7 @@ watch(
 )
 
 onUnmounted(() => {
+  disposed = true
   stopPolling()
   cancelHistoryRetry()
 })
@@ -481,6 +512,7 @@ onUnmounted(() => {
 
       <!-- last run -->
       <span
+        v-if="crontab.config.syncMode !== 'MIRROR'"
         class="hidden shrink-0 items-center gap-1.5 text-[13px] sm:flex"
         :class="lastRunStatus ? lastRunStatus.class : 'text-slate-300 dark:text-slate-600'"
       >
@@ -560,7 +592,13 @@ onUnmounted(() => {
             >
           </div>
 
-          <div class="flex flex-wrap items-center gap-1.5">
+          <p
+            v-if="crontab.config.syncMode === 'MIRROR' && crontab.config.mirrorAllAlbums"
+            class="text-xs text-slate-500"
+          >
+            每次执行自动读取该账号全部相册，包括未来新增相册。
+          </p>
+          <div v-else class="flex flex-wrap items-center gap-1.5">
             <Chip
               v-for="id in crontab.albumIds"
               :key="id"
@@ -582,7 +620,8 @@ onUnmounted(() => {
         </div>
 
         <!-- right: stats + history -->
-        <div class="min-w-0 space-y-3">
+        <MirrorTaskPanel v-if="crontab.config.syncMode === 'MIRROR'" :task-id="crontab.id" />
+        <div v-else class="min-w-0 space-y-3">
           <div
             v-if="crontab.running"
             class="rounded-md border border-blue-200/60 bg-blue-50/60 p-3 dark:border-blue-900/50 dark:bg-blue-950/20"
