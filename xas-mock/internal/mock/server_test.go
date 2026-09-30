@@ -53,6 +53,32 @@ func TestCheckedInScenariosLoad(t *testing.T) {
 	}
 }
 
+func TestCloudListSuccessEnvelope(t *testing.T) {
+	server, state := newTestServer(t)
+	defer server.Close()
+	cookie := cloudCookie(state, "mock-user")
+	for _, path := range []string{
+		"/gallery/user/album/list?pageNum=0&pageSize=10",
+		"/gallery/user/galleries?albumId=1&pageNum=0&pageSize=200",
+		"/sfs/ns/recorder/dir/0/list?limit=500&offset=0",
+	} {
+		t.Run(path, func(t *testing.T) {
+			response := doRequest(t, http.MethodGet, server.URL+path, nil, cookie)
+			if response.StatusCode != http.StatusOK {
+				t.Fatalf("status=%d", response.StatusCode)
+			}
+			var body struct {
+				Code *int `json:"code"`
+				Data map[string]json.RawMessage `json:"data"`
+			}
+			decodeResponse(t, response, &body)
+			if body.Code == nil || *body.Code != 0 || body.Data == nil {
+				t.Fatal("successful cloud lists must include code=0 and a data object")
+			}
+		})
+	}
+}
+
 func TestCloudContractSeparatesGalleryAndRecordings(t *testing.T) {
 	server, state := newTestServer(t)
 	defer server.Close()
