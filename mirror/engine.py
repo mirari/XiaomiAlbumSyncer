@@ -113,7 +113,17 @@ class Mirror:
         import fcntl
         with open(self.state / 'lock', 'a') as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            return self._run(apply, time.time() if now is None else now)
+            try:
+                return self._run(apply, time.time() if now is None else now)
+            finally:
+                if apply and not self.staging.is_symlink():
+                    # rmdir removes only empty directories; interrupted downloads and
+                    # receipts remain resumable. Never walk into directory symlinks.
+                    for directory, _, _ in os.walk(self.staging, topdown=False, followlinks=False):
+                        try:
+                            os.rmdir(directory)
+                        except OSError:
+                            pass  # Non-empty, already gone, or temporarily inaccessible.
 
     def _run(self, apply, now):
         previous = read_json(self.state / 'manifest.json', {'items': {}, 'missing': {}})

@@ -65,6 +65,24 @@ class EngineTests(unittest.TestCase):
             result = self.mirror.run(True, now=2)
         self.assertEqual(result['transfer']['resumed'], 1)
         self.assertEqual((self.root/'相机/a.jpg').read_bytes(), b'original')
+        self.assertFalse(external.exists())
+
+    def test_staging_cleanup_preserves_files_siblings_and_symlink_targets(self):
+        external = Path(self.temp.name)/'staging/7'
+        sibling = external.parent/'8'
+        sibling.mkdir(parents=True)
+        (external/'old/empty').mkdir(parents=True)
+        (external/'keep.part').write_bytes(b'incomplete')
+        (external/'keep.receipt').write_bytes(b'receipt')
+        (external/'link').symlink_to(sibling, target_is_directory=True)
+        self.mirror = Mirror(self.root, self.state, self.cloud, staging_root=external)
+        self.cloud.fail = True
+        with self.assertRaises(RuntimeError): self.baseline()
+        self.assertFalse((external/'old').exists())
+        self.assertEqual((external/'keep.part').read_bytes(), b'incomplete')
+        self.assertEqual((external/'keep.receipt').read_bytes(), b'receipt')
+        self.assertTrue((external/'link').is_symlink())
+        self.assertTrue(sibling.is_dir())
 
     def test_external_staging_cannot_overlap_photos(self):
         with self.assertRaises(ValueError):
