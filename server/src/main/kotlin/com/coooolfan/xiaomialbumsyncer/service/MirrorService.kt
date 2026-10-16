@@ -1,7 +1,8 @@
 package com.coooolfan.xiaomialbumsyncer.service
 
 import com.coooolfan.xiaomialbumsyncer.model.Crontab
-import com.coooolfan.xiaomialbumsyncer.model.XiaomiAccount
+import com.coooolfan.xiaomialbumsyncer.model.ProviderAccount
+import com.coooolfan.xiaomialbumsyncer.model.CloudProvider
 import com.coooolfan.xiaomialbumsyncer.xiaomicloud.XiaoMiApi
 import com.coooolfan.xiaomialbumsyncer.xiaomicloud.CloudResponseException
 import org.babyfish.jimmer.sql.kt.KSqlClient
@@ -56,10 +57,12 @@ class MirrorService(private val mapper: ObjectMapper, private val api: XiaoMiApi
             require(crontab.config.syncMode == "MIRROR")
             val root = Path.of(mirrorTargetDirectory(crontab.config.targetPath)).toAbsolutePath().normalize()
             require(root.parent != null && !state.startsWith(root) && !root.startsWith(state))
-            val selected = crontab.albums.map { it.remoteId.toString() }.filter { it != "-1" }
-            val audio = crontab.config.downloadAudios && (crontab.config.mirrorAllAlbums || crontab.albums.any { it.remoteId == -1L })
+            val selected = crontab.albums.map { it.remoteKey }.filter { it != "-1" }
+            val audio = crontab.config.downloadAudios && (crontab.config.mirrorAllAlbums || crontab.albums.any { it.remoteKey == "-1" })
             require(crontab.config.mirrorAllAlbums || selected.isNotEmpty() || audio) { "Select albums or enable all albums" }
-            val userId = checkNotNull(sql.findById(XiaomiAccount::class, crontab.accountId)).userId
+            val account = checkNotNull(sql.findById(ProviderAccount::class, crontab.accountId))
+            require(account.provider == CloudProvider.XIAOMI) { "Mirror mode supports Xiaomi accounts only" }
+            val userId = account.userId
             val identity = "xiaomi:" + MessageDigest.getInstance("SHA-256").digest(userId.toByteArray(Charsets.UTF_8))
                 .joinToString("") { "%02x".format(it) }
             val staging = (System.getenv("MIRROR_STAGING_BASE")?.let { Path.of(it).resolve(crontab.id.toString()) }

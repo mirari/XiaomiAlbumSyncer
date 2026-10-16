@@ -14,11 +14,12 @@ import Panel from 'primevue/panel'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
 import Tag from 'primevue/tag'
+import ProviderTag from '@/components/ProviderTag.vue'
 import ExpressionPathHelp from '@/components/ExpressionPathHelp.vue'
 import OptionCard from '@/components/OptionCard.vue'
 import MirrorFormOptions from '@/components/MirrorFormOptions.vue'
 import CronHelp from '@/components/CronHelp.vue'
-import type { CrontabSyncMode } from '@/__generated/model/enums'
+import type { CloudProvider, CrontabSyncMode } from '@/__generated/model/enums'
 import type { LocalCronForm } from '@/utils/crontabForm'
 
 const props = defineProps<{
@@ -28,7 +29,7 @@ const props = defineProps<{
   form: LocalCronForm
   formErrors: Record<string, string>
   timeZones: ReadonlyArray<string>
-  accountOptions: ReadonlyArray<{ label: string; value: number }>
+  accountOptions: ReadonlyArray<{ label: string; value: number; provider?: CloudProvider }>
   formAlbumOptions: ReadonlyArray<{ label: string; value: number; recording?: boolean }>
   targetPathMountWarning: boolean
   validateCronForm: (fields?: readonly string[]) => boolean
@@ -49,6 +50,9 @@ const visibleProxy = computed({
 const form = toRef(props, 'form')
 const formErrors = toRef(props, 'formErrors')
 const accountOptions = computed(() => [...props.accountOptions])
+const selectedAccount = computed(() =>
+  accountOptions.value.find((account) => account.value === form.value.accountId),
+)
 const formAlbumOptions = computed(() => [...props.formAlbumOptions])
 const timeZones = computed(() => [...props.timeZones])
 
@@ -70,8 +74,27 @@ const hasRecordingAlbum = computed(() =>
   form.value.albumIds.some((id) => formAlbumOptions.value.find((o) => o.value === id)?.recording),
 )
 
+const isICloud = computed(() => selectedAccount.value?.provider === 'ICLOUD')
+watch(
+  isICloud,
+  (value) => {
+    if (value) form.value.config.syncMode = 'ADD_ONLY'
+  },
+  { immediate: true },
+)
+watch(
+  [isICloud, () => form.value.config.checkSha1],
+  ([value]) => {
+    if (value && form.value.syncMode === 'TIMELINE') form.value.syncMode = 'CURSOR'
+    if (!value && form.value.config.checkSha1) {
+      form.value.config = { ...form.value.config, checkSha1: false }
+    }
+  },
+  { immediate: true },
+)
+
 const recommendedMode = computed<CrontabSyncMode>(() =>
-  hasRecordingAlbum.value ? 'FULL' : 'TIMELINE',
+  isICloud.value ? 'CURSOR' : hasRecordingAlbum.value ? 'FULL' : 'TIMELINE',
 )
 
 const syncModeCards = computed(() =>
@@ -81,18 +104,20 @@ const syncModeCards = computed(() =>
       ['TIMELINE', 'Timeline', 'pi-history'],
       ['CURSOR', 'Cursor', 'pi-bolt'],
     ] as const
-  ).map(([value, key, icon]) => ({
-    value,
-    icon,
-    label: t(`cronform.advanced.syncMode${key}`),
-    desc: t(`cronform.advanced.syncMode${key}Hint`),
-    badge:
-      value === 'CURSOR'
-        ? ('beta' as const)
-        : recommendedMode.value === value
-          ? ('recommended' as const)
-          : null,
-  })),
+  )
+    .filter(([value]) => !isICloud.value || value !== 'TIMELINE')
+    .map(([value, key, icon]) => ({
+      value,
+      icon,
+      label: t(`cronform.advanced.syncMode${key}`),
+      desc: t(`cronform.advanced.syncMode${key}Hint`),
+      badge:
+        value === 'CURSOR'
+          ? ('beta' as const)
+          : recommendedMode.value === value
+            ? ('recommended' as const)
+            : null,
+    })),
 )
 
 function goToStep(target: Step) {
@@ -243,7 +268,21 @@ watch(
                 :placeholder="t('cronform.field.accountPlaceholder')"
                 class="w-full"
                 :disabled="props.isEditing"
-              />
+              >
+                <template #value="slotProps">
+                  <div v-if="selectedAccount" class="flex min-w-0 items-center gap-2">
+                    <span class="truncate">{{ selectedAccount.label }}</span>
+                    <ProviderTag :provider="selectedAccount.provider" class="shrink-0 text-xs" />
+                  </div>
+                  <span v-else>{{ slotProps.placeholder }}</span>
+                </template>
+                <template #option="{ option }">
+                  <div class="flex min-w-0 items-center gap-2">
+                    <span class="truncate">{{ option.label }}</span>
+                    <ProviderTag :provider="option.provider" class="shrink-0 text-xs" />
+                  </div>
+                </template>
+              </Select>
               <div v-if="formErrors.accountId" class="text-[13px] text-red-600">
                 {{ formErrors.accountId }}
               </div>
@@ -255,7 +294,7 @@ watch(
 
           <!-- 同步范围 -->
           <div v-else-if="step === 'scope'" key="scope" class="space-y-4 pt-2">
-            <MirrorFormOptions v-model:form="form" />
+            <MirrorFormOptions v-if="!isICloud" v-model:form="form" />
             <div class="space-y-2">
               <label class="block text-[13px] font-medium text-slate-500 dark:text-slate-400">{{
                 t('cronform.field.albums')
@@ -495,7 +534,7 @@ watch(
                     {{ t('cronform.advanced.rewriteFileSystemTimeHint') }}
                   </div>
                 </div>
-                <div class="space-y-1">
+                <div v-if="isICloud" class="space-y-1">
                   <div
                     class="flex items-center gap-2 text-[13px] text-slate-600 dark:text-slate-300"
                   >
@@ -503,8 +542,7 @@ watch(
                     <span>{{ t('cronform.advanced.checkSha1') }}</span>
                   </div>
                   <div class="text-[13px] text-slate-500 dark:text-slate-400">
-                    {{ t('cronform.advanced.checkSha1Hint')
-                    }}<span class="font-bold">{{ t('cronform.advanced.checkSha1Warning') }}</span>
+                    {{ t('cronform.advanced.checkSha1Hint') }}
                   </div>
                 </div>
               </div>

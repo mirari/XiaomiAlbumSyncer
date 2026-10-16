@@ -3,16 +3,18 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Tag from 'primevue/tag'
+import ProviderTag from '@/components/ProviderTag.vue'
 import Textarea from 'primevue/textarea'
 import InputText from 'primevue/inputtext'
 import Dialog from 'primevue/dialog'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
+import ICloudLoginForm from '@/components/settings/ICloudLoginForm.vue'
 import SettingSection from '@/components/settings/SettingSection.vue'
 import OptionCard from '@/components/OptionCard.vue'
 import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
-import type { XiaomiAccountDto } from '@/__generated/model/dto'
+import type { ProviderAccountDto } from '@/__generated/model/dto'
 import type { QrLoginSessionView } from '@/__generated/model/static'
 import type { QrLoginStatus } from '@/__generated/model/enums'
 import { storeToRefs } from 'pinia'
@@ -22,18 +24,36 @@ import { useAlbumsStore } from '@/stores/albums'
 import { useCrontabsStore } from '@/stores/crontabs'
 
 // 类型定义
-type Account = XiaomiAccountDto['XiaomiAccountController/DEFAULT_XIAOMI_ACCOUNT']
+type Account = ProviderAccountDto['ProviderAccountController/DEFAULT_PROVIDER_ACCOUNT']
 
 const accountsStore = useAccountsStore()
 const albumsStore = useAlbumsStore()
 const crontabsStore = useCrontabsStore()
 
 const { accounts, loading } = storeToRefs(accountsStore)
+const icloudStates = ref<Record<number, string>>({})
+watch(
+  accounts,
+  async (list) => {
+    const results = await Promise.allSettled(
+      list
+        .filter((a) => a.provider === 'ICLOUD')
+        .map(async (a) => {
+          const status = await api.icloudController.status({ id: a.id })
+          return [a.id, status.state] as const
+        }),
+    )
+    icloudStates.value = Object.fromEntries(
+      results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : [])),
+    )
+  },
+  { immediate: true },
+)
 const saving = ref(false)
 const showDialog = ref(false)
 const isEditMode = ref(false)
 const isInsecureContext = ref(false)
-const dialogStep = ref<'provider' | 'method' | 'qr' | 'manual'>('provider')
+const dialogStep = ref<'provider' | 'method' | 'qr' | 'manual' | 'icloud'>('provider')
 const slideDir = ref<'slide-left' | 'slide-right'>('slide-left')
 
 // 表单数据
@@ -55,6 +75,7 @@ let qrSeq = 0
 const { t } = useI18n()
 
 const dialogHeader = computed(() => {
+  if (dialogStep.value === 'icloud') return t('tokens.account.providerIcloud')
   if (isEditMode.value) return t('tokens.account.edit')
   if (dialogStep.value === 'qr') return t('tokens.account.qrTitle')
   if (dialogStep.value === 'manual') return t('tokens.account.methodManualTitle')
@@ -105,7 +126,7 @@ function selectManual() {
 
 function goBack() {
   slideDir.value = 'slide-right'
-  dialogStep.value = dialogStep.value === 'method' ? 'provider' : 'method'
+  dialogStep.value = ['method', 'icloud'].includes(dialogStep.value) ? 'provider' : 'method'
 }
 
 async function refreshQrSession() {
@@ -182,7 +203,7 @@ function openEditDialog(account: Account) {
     nickname: account.nickname,
     passToken: '',
   }
-  dialogStep.value = 'manual'
+  dialogStep.value = account.provider === 'ICLOUD' ? 'icloud' : 'manual'
   showDialog.value = true
 }
 
@@ -245,6 +266,29 @@ async function onSave() {
   }
 }
 
+async function onICloudCompleted(accountId: number) {
+  showDialog.value = false
+  toast.add({
+    severity: 'success',
+    summary: t('common.toast.success'),
+    detail: t('tokens.icloud.connected'),
+    life: 3000,
+  })
+  try {
+    await Promise.all([
+      albumsStore.refreshAlbumsForAccount(accountId),
+      crontabsStore.refreshCrontabs(),
+    ])
+  } catch (e) {
+    toast.add({
+      severity: 'error',
+      summary: t('common.toast.error'),
+      detail: e instanceof Error ? e.message : String(e),
+      life: 5000,
+    })
+  }
+}
+
 function confirmDelete(account: Account) {
   confirm.require({
     message: t('tokens.account.confirmDelete', { name: account.nickname || account.userId }),
@@ -296,8 +340,17 @@ function confirmDelete(account: Account) {
       <Column field="nickname" :header="t('tokens.account.nickname')"></Column>
       <Column field="userId" :header="t('tokens.account.userId')"></Column>
       <Column :header="t('tokens.account.provider')">
-        <template #body>
-          <Tag :value="t('tokens.account.providerXiaomi')" severity="info" />
+        <template #body="{ data }">
+          <ProviderTag :provider="data.provider" full-name />
+        </template>
+      </Column>
+      <Column :header="t('tokens.icloud.status')">
+        <template #body="{ data }">
+          <Tag
+            v-if="data.provider === 'ICLOUD' && icloudStates[data.id]"
+            :value="t(`tokens.icloud.states.${icloudStates[data.id]}`)"
+            :severity="icloudStates[data.id] === 'READY' ? 'success' : 'warn'"
+          />
         </template>
       </Column>
       <Column :header="t('tokens.table.actions')" :style="{ width: '10rem' }">
@@ -325,7 +378,7 @@ function confirmDelete(account: Account) {
 
   <!-- 添加/编辑 弹窗 -->
   <Dialog v-model:visible="showDialog" modal :header="dialogHeader" class="w-full sm:w-[480px]">
-    <div class="overflow-x-hidden">
+    <div class="-mx-1 overflow-x-hidden px-1">
       <Transition :name="slideDir" mode="out-in">
         <!-- 渠道选择 -->
         <div v-if="dialogStep === 'provider'" key="provider" class="flex flex-col gap-3 pt-2">
@@ -339,12 +392,8 @@ function confirmDelete(account: Account) {
             icon="pi-apple"
             :label="t('tokens.account.providerIcloud')"
             :desc="t('tokens.account.providerIcloudDesc')"
-            disabled
-          >
-            <template #badge>
-              <Tag :value="t('common.status.comingSoon')" severity="secondary" />
-            </template>
-          </OptionCard>
+            @click="dialogStep = 'icloud'"
+          />
         </div>
 
         <!-- 添加方式选择 -->
@@ -408,6 +457,15 @@ function confirmDelete(account: Account) {
           </div>
         </div>
 
+        <ICloudLoginForm
+          v-else-if="dialogStep === 'icloud'"
+          key="icloud"
+          :account-id="isEditMode ? form.id : undefined"
+          :apple-id="form.userId"
+          :nickname="form.nickname"
+          @completed="onICloudCompleted"
+        />
+
         <!-- PassToken 表单 -->
         <div v-else key="manual" class="flex flex-col gap-4 pt-2">
           <div class="flex gap-3">
@@ -422,9 +480,9 @@ function confirmDelete(account: Account) {
               />
             </div>
             <div class="flex-1">
-              <label class="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1"
-                >{{ t('tokens.account.nickname') }} ({{ t('common.field.optional') }})</label
-              >
+              <label class="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">{{
+                t('tokens.account.nickname')
+              }}</label>
               <InputText
                 v-model="form.nickname"
                 :placeholder="t('tokens.account.nicknamePlaceholder')"

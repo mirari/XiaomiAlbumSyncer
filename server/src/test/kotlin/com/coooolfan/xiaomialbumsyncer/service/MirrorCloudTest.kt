@@ -8,11 +8,11 @@ import java.time.Instant
 
 class MirrorCloudTest {
     private fun album(remote: Long, count: Long = 1) = Album {
-        remoteId = remote; name = if (remote == -1L) "录音" else "相机"
+        remoteKey = remote.toString(); name = if (remote == -1L) "录音" else "相机"
         assetCount = count; lastUpdateTime = Instant.EPOCH; accountId = 2
     }
     private fun asset(type: AssetType = AssetType.IMAGE) = Asset {
-        id = 42; fileName = "sample.jpg"; this.type = type; sha1 = "a".repeat(40); size = 7
+        id = 999; remoteKey = "42"; fileName = "sample.jpg"; this.type = type; checksum = "a".repeat(40); size = 7
     }
     private fun task(images: Boolean = true, all: Boolean = true) = Crontab {
         id = 2; accountId = 2; albums = emptyList()
@@ -22,11 +22,12 @@ class MirrorCloudTest {
     @Test fun `native assets keep existing baseline keys and recording paths`() {
         var downloaded: Asset? = null
         val cloud = MirrorCloud(task(), { listOf(album(1), album(-1, 0)) }, { album, handler ->
-            assertEquals(album.remoteId, album.id)
-            handler(listOf(asset(if (album.remoteId == -1L) AssetType.AUDIO else AssetType.IMAGE))); 1
+            assertEquals(album.remoteKey.toLong(), album.id)
+            handler(listOf(asset(if (album.remoteKey == "-1") AssetType.AUDIO else AssetType.IMAGE))); 1
         }, { item, _ -> downloaded = item; true })
         val snapshot = cloud.snapshot()
         assertEquals(setOf("photo:1:42", "audio:42"), snapshot.keys)
+        assertEquals("a".repeat(40), snapshot["photo:1:42"]?.get("sha1"))
         assertEquals("录音/42_sample.jpg", snapshot["audio:42"]?.get("path"))
         cloud.download("audio:42", Path.of("stage"))
         assertEquals(AssetType.AUDIO, downloaded?.type)

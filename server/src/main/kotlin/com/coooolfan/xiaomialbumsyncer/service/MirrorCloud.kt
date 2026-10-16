@@ -25,41 +25,42 @@ internal class MirrorCloud(
     fun snapshot(): Map<String, Map<String, Any>> {
         scanned.clear()
         val before = albums()
-        val photoAlbums = before.filter { it.remoteId != -1L }
-        check(photoAlbums.any { it.remoteId == 1L }) { "Camera album missing; cleanup refused" }
-        check(before.map { it.remoteId }.distinct().size == before.size) { "Duplicate album page" }
-        val selected = crontab.albums.map { it.remoteId }.toSet()
-        check(crontab.config.mirrorAllAlbums || before.map { it.remoteId }.containsAll(selected)) {
+        val photoAlbums = before.filter { it.remoteKey != "-1" }
+        check(photoAlbums.any { it.remoteKey == "1" }) { "Camera album missing; cleanup refused" }
+        check(before.map { it.remoteKey }.distinct().size == before.size) { "Duplicate album page" }
+        val selected = crontab.albums.map { it.remoteKey }.toSet()
+        check(crontab.config.mirrorAllAlbums || before.map { it.remoteKey }.containsAll(selected)) {
             "Selected album missing; cleanup refused"
         }
         val entries = linkedMapOf<String, Map<String, Any>>()
         for (remote in before) {
-            if (!crontab.config.mirrorAllAlbums && remote.remoteId !in selected) continue
-            val audio = remote.remoteId == -1L
+            if (!crontab.config.mirrorAllAlbums && remote.remoteKey !in selected) continue
+            val audio = remote.remoteKey == "-1"
             if (audio && !crontab.config.downloadAudios) continue
             // Native parsing needs a local album id; this snapshot is never persisted to SQL.
-            val album = Album(remote) { id = remote.remoteId }
-            val seen = mutableSetOf<Long>()
+            val album = Album(remote) { id = remote.remoteKey.toLong() }
+            val seen = mutableSetOf<String>()
             assets(album) { page ->
                 for (asset in page) {
-                    check(seen.add(asset.id)) { "Duplicate asset page; cleanup refused" }
+                    check(seen.add(asset.remoteKey)) { "Duplicate asset page; cleanup refused" }
                     if (asset.type == AssetType.IMAGE && !crontab.config.downloadImages) continue
                     if (asset.type == AssetType.VIDEO && !crontab.config.downloadVideos) continue
-                    val key = if (audio) "audio:${asset.id}" else "photo:${album.remoteId}:${asset.id}"
-                    val name = if (audio) "${asset.id}_${asset.fileName}" else asset.fileName
+                    val key = if (audio) "audio:${asset.remoteKey}" else "photo:${album.remoteKey}:${asset.remoteKey}"
+                    val name = if (audio) "${asset.remoteKey}_${asset.fileName}" else asset.fileName
                     for (component in listOf(album.name, name)) {
                         require(component.isNotEmpty() && component.none { it == '/' || it == '\\' }) {
                             "Cloud names must be single path components"
                         }
                     }
-                    entries[key] = mapOf("path" to "${album.name}/$name", "sha1" to asset.sha1.lowercase(), "size" to asset.size)
-                    scanned[key] = asset
+                    entries[key] = mapOf("path" to "${album.name}/$name", "sha1" to asset.checksum.lowercase(), "size" to asset.size)
+                    // Snapshot assets are not persisted; the upstream downloader uses id in error logs.
+                    scanned[key] = Asset(asset) { id = asset.remoteKey.toLong() }
                 }
             }
             check(audio || seen.size.toLong() == album.assetCount) { "Album count changed or scan incomplete; cleanup refused" }
         }
-        fun signature(list: List<Album>) = list.filter { it.remoteId != -1L }
-            .associate { it.remoteId to Triple(it.name, it.assetCount, it.lastUpdateTime) }
+        fun signature(list: List<Album>) = list.filter { it.remoteKey != "-1" }
+            .associate { it.remoteKey to Triple(it.name, it.assetCount, it.lastUpdateTime) }
         check(signature(before) == signature(albums())) { "Albums changed during scan; retry later" }
         return entries
     }
