@@ -78,7 +78,7 @@ const isICloud = computed(() => selectedAccount.value?.provider === 'ICLOUD')
 watch(
   isICloud,
   (value) => {
-    if (value) form.value.config.syncMode = 'ADD_ONLY'
+    if (value) form.value.config = { ...form.value.config, syncMode: 'ADD_ONLY' }
   },
   { immediate: true },
 )
