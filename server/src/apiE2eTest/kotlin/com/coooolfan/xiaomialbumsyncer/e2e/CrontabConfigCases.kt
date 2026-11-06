@@ -2,6 +2,11 @@ package com.coooolfan.xiaomialbumsyncer.e2e
 
 object CrontabConfigCases {
 
+    // Mirror options are omitted in the upstream matrix to verify backward-compatible defaults.
+    private val mirrorDefaults: Map<String, Any?> = mapOf(
+        "syncMode" to "ADD_ONLY", "mirrorAllAlbums" to true, "mirrorReportOnly" to true,
+    )
+
     private val Omit = Any()
     private val ExplicitNull = Any()
 
@@ -46,14 +51,15 @@ object CrontabConfigCases {
 
     val total: Int = dimensions.fold(1) { acc, dimension -> acc * dimension.states.size }
 
-    val declaredFieldNames: Set<String> = fixedValues.keys + dimensions.mapTo(linkedSetOf()) { it.field }
-    val optionalFieldNames: Set<String> = setOf(
+    val declaredFieldNames: Set<String> = mirrorDefaults.keys + fixedValues.keys + dimensions.mapTo(linkedSetOf()) { it.field }
+    val optionalFieldNames: Set<String> = mirrorDefaults.keys + setOf(
         "skipExistingFile", "rewriteFileSystemTime", "checkSha1", "downloadAudios", "notify",
         "fetchFromDbSize", "downloaders", "verifiers", "exifProcessors", "fileTimeWorkers",
     )
     val nullableFieldNames: Set<String> = setOf("rewriteExifTimeZone")
-    val stringFields: Set<String> = setOf("expression", "timeZone", "targetPath", "rewriteExifTimeZone")
+    val stringFields: Set<String> = setOf("expression", "timeZone", "targetPath", "rewriteExifTimeZone", "syncMode")
     val booleanFields: Set<String> = setOf(
+        "mirrorAllAlbums", "mirrorReportOnly",
         "downloadImages", "downloadVideos", "rewriteExifTime",
         "skipExistingFile", "rewriteFileSystemTime", "checkSha1", "downloadAudios", "notify",
     )
@@ -77,6 +83,7 @@ object CrontabConfigCases {
         input += fixedValues
         val expected = linkedMapOf<String, Any?>()
         expected += fixedValues
+        expected += mirrorDefaults
         dimensions.forEach { dimension ->
             val state = dimension.states[remainder % dimension.states.size]
             remainder /= dimension.states.size
